@@ -27,3 +27,18 @@
 - New tests: FR-GAU-1 TMST grid and c^2 identity; FR-GAU-2(c) combining-network threshold (V0 div_netthreshold, exact
   reduction to eta*); FR-GAU-4 (a)-(d); FR-GAU-5 exclusion rule |y-(1+tau)| < 1e-9; FR-GAU-6 (c).
 - Tolerances centralised in `tests/tolerances.py`. 123 tests passing (incl. M0), 100% coverage; Q-1 and Q-2 closed.
+
+## M2 — Stochastic channel (FR-CH-1,2,3,5,6)
+- Built: `numerics/` (`integrate.checked_quad` with the TSD §6.4 mpmath fallback, `sampling.rejection_sample`,
+  `mcagree` Bonferroni/KS rule of FSD §4.3), `channel/small_scale.py` (`SmallScale`: pdf/cdf/sf/ppf, truncated
+  moments, `sample_sum`, `sample_elements`), `channel/large_scale.py` (`ShiftedLogGamma`, `DeterministicLoss`,
+  `LogNormalV0` flagged non-physical, `ConditionedLogNormal`), `channel/compound.py` (`CompoundPDT`: cdf/sf/pdf/ppf/
+  moments/sampler in Psi-space), `channel/link_budget.py` (Goubau default, flagged `friis_clipped`).
+  FR-CH-4 (obstacle generator) is optional and assigned to M6, so not built here.
+- References reproduced: Z_K = 0.63249 / 0.54404 / 0.51689; log-gamma mean 0.96098; V0 mass above 1 = 0.158655;
+  tau^2 = 2.7816, eta_geo = 0.93806; absorption range 555.47 m; A = 1.82 m^2 for eta_bar = 0.9999 at 10 m.
+- Validation: MC-agree on cdf at 50 points for 5 compound cases; quadrature moments rtol 1e-8; KS D < 2e-3 at 1e6
+  samples; sample_sum vs sample_elements (two-sample KS, N <= 64); mpmath at N in {1e5, 1e7} down to ~2e-8 tails.
+- Tests: 226 total, 99.8% coverage on `src/`, ruff + mypy --strict clean. The slow tier (mpmath, MC) takes ~90 s.
+- Open findings: Q-3 (scipy central chi2 cdf inaccurate in far lower tail at large N; worked around),
+  Q-4 (G_enh scope), Q-5 (ncx2.pdf nan far from the mean; worked around).

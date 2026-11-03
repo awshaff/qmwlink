@@ -53,6 +53,7 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q --strict-markers"
+markers = ["slow: mpmath / heavy Monte Carlo checks (still part of the default run)"]
 pythonpath = ["tests"]
 
 [tool.coverage.run]

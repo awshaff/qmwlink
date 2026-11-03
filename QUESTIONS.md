@@ -21,3 +21,34 @@
 - Recommendation: A for now (general formula is test-only per TSD §5.2); closed form gets an optional
   analytic `det` argument, used in production paths. No tolerance was changed.
 - Status: resolved — TSD v0.4 §5.2 / FSD FR-GAU-4 now mandate the cancellation-free form (option C). Implemented in `nu_minus_general`; r = 3 TMSV now matches exp(-6) to ~2e-12 and 10^4 random CMs (b up to 5e3) agree with the closed form to rtol 1e-10. My earlier recommendation (option A) was wrong.
+
+## Q-3 [finding] scipy central chi-square cdf is inaccurate in the far lower tail at large N
+- Context: `channel/small_scale.py`, FR-CH-1, TSD §6.1 ("K = 0: use scipy.stats.chi2"), NFR-2 (tail probabilities
+  to 1e-8 within 1%), scipy 1.18.1.
+- Observation: against a 40-digit mpmath reference (series and direct quadrature agree), the lower-tail cdf at
+  z = -5.5 sd of chi2(df = 2N) (value ~1.8e-8) has relative error 8e-15 (N = 1e5), 1.6e-6 (N = 1e6), 2.3e-2 (N = 1e7)
+  and 3.2e-1 (N = 1e8). `special.gammainc` and `chi2.cdf` are identical; cause is exponent cancellation in
+  `a ln y - y - lgamma(a+1)` (~1e9 magnitude). `ncx2(nu, nc=0)` delegates to the same code; `ncx2(nu, nc=1e-300)`
+  is accurate to 7.6e-14 (N = 1e7) and 2.5e-13 (N = 1e8) and agrees with chi2 to 1e-15 for N <= 100.
+- Options: A) follow TSD literally (chi2) and accept the error; B) K = 0 uses `ncx2(nu, nc=1e-300)`;
+  C) own Stirling-corrected gamma tail.
+- Recommendation: B (implemented). `K == 0` closed forms (truncated exponential, Erlang) are tested at small N.
+  The TSD §6.1 K = 0 wording should be amended to say so. Also note `ncx2.pdf` returns nan ~27 sd below the
+  mean for N = 1e7, K = 10 (true value < 1e-100); moments integrate from mean - 20 sd instead of masking it.
+- Status: open (implemented per B)
+
+## Q-4 [non-blocking] Scope of the enhancement factor G_enh in the link budget
+- Context: `channel/link_budget.py::link_budget`, FR-CH-6, TSD §6.5 ("Either is multiplied by an optional
+  enhancement factor G_enh >= 1").
+- Observation: "either" is ambiguous (transmit aperture, receive aperture, or both with one factor).
+  TSD §7.4 says G_enh enters "only through A_r".
+- Options: A) one factor on A_r only; B) separate `g_enh_tx`, `g_enh_rx`.
+- Recommendation: B (implemented, both default to 1), so A is `g_enh_tx=1`. Confirm intended use.
+- Status: open
+
+## Q-5 [non-blocking] `ncx2.pdf` returns nan far from the mean (scipy 1.18.1)
+- Context: `SmallScale.moment` (TSD §6.1), N = 1e7, K = 10 (and K = 1e8, N = 1).
+- Observation: `stats.ncx2(...).pdf` returns nan in bands ~27 sd from the mean where the true density is < 1e-100.
+- Options: A) mask nan as 0; B) integrate only over mean +/- 20 sd and raise on any non-finite value.
+- Recommendation: B (implemented); neglected mass < 1e-80.
+- Status: open (implemented per B)
