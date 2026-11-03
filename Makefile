@@ -1,7 +1,7 @@
 VENV ?= .venv
 PY   := $(VENV)/bin/python
 
-.PHONY: install test lint figs paper-figs bench clean
+.PHONY: install test lint figs paper-figs exp bench clean
 
 install:
 	uv venv --python 3.12 $(VENV)
@@ -15,7 +15,7 @@ lint:
 	$(PY) -m ruff format --check src tests
 	$(PY) -m mypy --strict src
 
-figs paper-figs bench:
+figs paper-figs exp bench:
 	@echo "target '$@' is not implemented yet (milestone M6/M7)"; exit 1
 
 clean:

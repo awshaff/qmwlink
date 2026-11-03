@@ -1,11 +1,14 @@
-"""Thermal occupation and critical transmissivity. (FR-PHY-1, FR-PHY-2, TSD §3)"""
+"""Thermal occupation, critical transmissivity, BBR-equivalent field.
+
+(FR-PHY-1, FR-PHY-2, FR-PHY-3, TSD §3, §7.4)
+"""
 
 from __future__ import annotations
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 
-from qmwlink.constants import K_B, H
+from qmwlink.constants import EPS0, ETA0, K_B, C, H
 
 FloatArray = NDArray[np.float64]
 
@@ -55,3 +58,35 @@ def one_minus_eta_star(f_hz: ArrayLike, T_env_k: ArrayLike) -> FloatArray:
     """Window ``1 - eta* = 1/(1+n)`` computed directly, without subtraction. (FR-PHY-2, TSD §3.2)"""
     n = n_th(f_hz, T_env_k)
     return np.asarray(1.0 / (1.0 + n), dtype=np.float64)
+
+
+def effective_aperture_m2(f_hz: ArrayLike) -> FloatArray:
+    """Short-dipole effective aperture ``A_e = 3 lambda^2 / (8 pi)`` [m^2]. (FR-PHY-3, TSD §7.4)
+
+    Antenna-equivalence convention (FSD §4): a modeling convention for comparing receivers,
+    not derived physics.
+    """
+    f, _ = _validate(f_hz, 0.0)
+    lam = C / f
+    return np.asarray(3.0 * lam**2 / (8.0 * np.pi), dtype=np.float64)
+
+
+def s_e_bbr(f_hz: ArrayLike, T_env_k: ArrayLike, *, planck: bool = True) -> FloatArray:
+    """BBR-equivalent rms single-sided field density ``sqrt(n hf eta0 / A_e)`` [V/m/sqrt(Hz)].
+
+    Mode-occupation route. ``planck=True`` uses the Bose-Einstein ``n``; ``planck=False`` the
+    Rayleigh-Jeans ``k_B T / (h f)``. (FR-PHY-3, TSD §7.4)
+    """
+    n = n_th(f_hz, T_env_k) if planck else n_th_rj(f_hz, T_env_k)
+    f, _ = _validate(f_hz, T_env_k)
+    return np.asarray(np.sqrt(n * H * f * ETA0 / effective_aperture_m2(f)), dtype=np.float64)
+
+
+def s_e_bbr_energy_density_rj(f_hz: ArrayLike, T_env_k: ArrayLike) -> FloatArray:
+    """RJ single-component BBR field density ``sqrt(8 pi f^2 k_B T / (3 eps0 c^3))``.
+
+    Independent energy-density route; equals ``s_e_bbr(..., planck=False)`` algebraically.
+    (FR-PHY-3, TSD §7.4)
+    """
+    f, T = _validate(f_hz, T_env_k)
+    return np.asarray(np.sqrt(8.0 * np.pi * f**2 * K_B * T / (3.0 * EPS0 * C**3)), dtype=np.float64)

@@ -7,6 +7,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
+import tolerances as tol
 from qmwlink.constants import K_B, H
 from qmwlink.thermal import eta_star, n_th, n_th_rj, one_minus_eta_star
 
@@ -48,17 +49,19 @@ def test_rj_limit() -> None:
 
 @given(f=st.floats(1e8, 1e12), T=st.floats(1.0, 1000.0))
 def test_rj_relative_error_identity(f: float, T: float) -> None:
-    """(RJ - exact)/exact = (e^x - 1)/x - 1 exactly, with x = hf/kT; -> x/2 as x -> 0.
-
-    Note: this is slightly above the FR-PHY-1 AC bound hf/2kT (see QUESTIONS.md Q-1).
-    """
+    """FR-PHY-1 AC: (RJ - exact)/exact = expm1(x)/x - 1, x = hf/kT, to rtol 1e-9."""
     x = H * f / (K_B * T)
     exact = float(n_th(f, T))
     rj = float(n_th_rj(f, T))
-    if x < 1.0:
-        assert (rj - exact) / exact == pytest.approx(np.expm1(x) / x - 1.0, rel=1e-6)
-    if x < 1e-3:
-        assert (rj - exact) / exact == pytest.approx(x / 2, rel=1e-2)
+    assert (rj - exact) / exact == pytest.approx(np.expm1(x) / x - 1.0, rel=tol.RTOL_RJ_REL_ERR)
+
+
+def test_rj_relative_error_spot_300ghz() -> None:
+    """FR-PHY-1 AC spot value 2.438e-2 (vs x/2 = 2.400e-2) at 300 GHz, 300 K."""
+    f, T = 300e9, 300.0
+    err = float(n_th_rj(f, T)) / float(n_th(f, T)) - 1.0
+    assert err == pytest.approx(2.438e-2, abs=tol.ABS_RJ_REL_ERR_300GHZ)
+    assert H * f / (K_B * T) / 2 == pytest.approx(2.400e-2, abs=tol.ABS_RJ_REL_ERR_300GHZ)
 
 
 @given(f=st.floats(1e8, 1e12), T=st.floats(0.0, 1000.0))
