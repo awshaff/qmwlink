@@ -1,0 +1,63 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "qmwlink"
+version = "0.1.0"
+description = "Quantum-consistent stochastic microwave channels with Rydberg atomic receivers"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy==2.5.4",
+    "scipy==1.18.1",
+    "mpmath==1.4.1",
+    "matplotlib==3.11.2",
+    "pydantic==2.14.2",
+    "pyyaml==6.0.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.2.0",
+    "pytest-cov==7.1.0",
+    "hypothesis==6.170.14",
+    "ruff==0.17.3",
+    "mypy==2.4.1",
+    "types-PyYAML==6.0.12.20261030",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+qmwlink = ["py.typed"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "N", "SIM", "RUF"]
+# Physics notation (V, N_s, ...) is intentional.
+ignore = ["N802", "N803", "N806", "RUF002", "RUF003"]
+
+[tool.mypy]
+strict = true
+files = ["src"]
+
+[[tool.mypy.overrides]]
+module = ["scipy.*", "mpmath.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+pythonpath = ["tests"]
+
+[tool.coverage.run]
+source = ["src/qmwlink"]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
