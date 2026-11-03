@@ -7,6 +7,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
+import tolerances as tol
 from qmwlink.gaussian.channels import (
     PIChannel,
     apply_to_mode_b,
@@ -57,7 +58,7 @@ def test_constructor_argument_errors() -> None:
         PIChannel.thermal_attenuator(one_minus_eta=-0.1)
     with pytest.raises(ValueError, match="n_bar"):
         PIChannel.thermal_attenuator(0.5, -1.0)
-    with pytest.raises(ValueError, match="n_quanta"):
+    with pytest.raises(ValueError, match="n_add"):
         PIChannel.additive_noise(-1.0)
     with pytest.raises(ValueError, match="gain"):
         PIChannel.amplifier(0.5)
@@ -89,8 +90,10 @@ def test_matmul_semantics_and_type() -> None:
 def test_composition_associative_and_physical(a: PIChannel, b: PIChannel, c: PIChannel) -> None:
     left = (c @ b) @ a
     right = c @ (b @ a)
-    assert float(left.tau) == pytest.approx(float(right.tau), rel=1e-12, abs=1e-300)
-    assert float(left.y) == pytest.approx(float(right.y), rel=1e-12, abs=1e-12)
+    assert float(left.tau) == pytest.approx(float(right.tau), rel=tol.RTOL_COMPOSITION, abs=1e-300)
+    assert float(left.y) == pytest.approx(
+        float(right.y), rel=tol.RTOL_COMPOSITION, abs=tol.ATOL_COMPOSITION_Y
+    )
 
 
 @given(unit, occ, unit, occ)
@@ -102,8 +105,8 @@ def test_attenuator_cascade_closed_form(e1: float, n1: float, e2: float, n2: flo
     eta = e1 * e2
     n_eff = float(attenuator_cascade_n_eff(e1, n1, e2, n2))
     ref = PIChannel.thermal_attenuator(eta, n_eff)
-    assert float(casc.tau) == pytest.approx(float(ref.tau), rel=1e-12, abs=1e-300)
-    assert float(casc.y) == pytest.approx(float(ref.y), rel=1e-9, abs=1e-12)
+    assert float(casc.tau) == pytest.approx(float(ref.tau), rel=tol.RTOL_COMPOSITION, abs=1e-300)
+    assert float(casc.y) == pytest.approx(float(ref.y), rel=1e-9, abs=tol.ATOL_COMPOSITION_Y)
 
 
 def test_cascade_errors() -> None:
@@ -144,7 +147,7 @@ def test_apply_to_mode_b_block_form_and_physical() -> None:
             [np.sqrt(eta) * c * z, (eta * a + (1 - eta) * (2 * nb + 1)) * np.eye(2)],
         ]
     )
-    np.testing.assert_allclose(out, expected, rtol=1e-14)
+    np.testing.assert_allclose(out, expected, rtol=tol.RTOL_STATE_BLOCK)
     assert bool(is_physical(out))
 
 

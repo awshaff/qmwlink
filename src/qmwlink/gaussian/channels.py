@@ -80,11 +80,11 @@ class PIChannel:
         return cls(e, om * (2.0 * n + 1.0))
 
     @classmethod
-    def additive_noise(cls, n_quanta: ArrayLike) -> PIChannel:
-        """Additive classical noise of ``N`` quanta, ``(1, 2N)``. (FR-GAU-2, TSD §4.1)"""
-        n = _as_float(n_quanta)
+    def additive_noise(cls, n_add: ArrayLike) -> PIChannel:
+        """Additive noise of ``N_add`` quanta, ``(1, 2 N_add)``. (FR-GAU-2, TSD §4.1)"""
+        n = _as_float(n_add)
         if np.any(n < 0):
-            raise ValueError("n_quanta must be >= 0")
+            raise ValueError("n_add must be >= 0")
         return cls(np.float64(1.0), 2.0 * n)
 
     @classmethod

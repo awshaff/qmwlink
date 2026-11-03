@@ -8,7 +8,7 @@
 - Options: A) keep the AC as an asymptotic statement (error -> x/2); B) amend the AC to
   "error < (e^x - 1)/x - 1" or "< x/2 (1 + x/3)" or similar.
 - Recommendation: B. Tests currently assert the exact identity and the x -> 0 limit; no tolerance was loosened.
-- Status: resolved — option B chosen by Aan; FR-PHY-1 AC in docs/FSD.md amended to the exact identity (x/2 as x→0).
+- Status: resolved — superseded by FSD v0.6, which adopts the exact identity (rtol 1e-9, 300 GHz spot value 2.438e-2). Tests follow it.
 
 ## Q-2 [non-blocking] General PT-eigenvalue formula loses precision when nu_- << 1
 - Context: `entanglement.nu_minus_general`, FR-GAU-4 AC ("general and closed forms agree to 1e-12"), TSD §5.2.
@@ -20,4 +20,4 @@
   C) compute nu_-^2 as det V / nu_+^2 in the general routine.
 - Recommendation: A for now (general formula is test-only per TSD §5.2); closed form gets an optional
   analytic `det` argument, used in production paths. No tolerance was changed.
-- Status: open
+- Status: resolved — TSD v0.4 §5.2 / FSD FR-GAU-4 now mandate the cancellation-free form (option C). Implemented in `nu_minus_general`; r = 3 TMSV now matches exp(-6) to ~2e-12 and 10^4 random CMs (b up to 5e3) agree with the closed form to rtol 1e-10. My earlier recommendation (option A) was wrong.

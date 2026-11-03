@@ -19,4 +19,12 @@
   TSD §10 identity/limit checks done: associativity, §4.3 closed form, general vs closed form,
   §5.4 condition vs `nu_-` on 10^4-point grids (r = 0.1, 0.8, 2), TMST vs TMSV reduction.
 - Resolved: Q-1 (FR-PHY-1 AC amended in docs/FSD.md per Aan, option B).
-- Open findings: Q-2 (non-blocking) — general `nu_-` formula loses precision when `nu_- << 1`.
+- Open findings: none.
+
+### M1 revision after spec v0.6 / TSD v0.4
+- `nu_minus_general` now uses the mandated cancellation-free form (resolves Q-2); optional analytic `det` on the closed form.
+- `teleportation_fidelity` renamed `fidelity_opt`; added `fidelity_bk`; `additive_noise(n_quanta)` -> `n_add`.
+- Added `tmst_one_minus_eta_star` / `tmst_eta_star` (brentq on omega = 1 - eta; reference values reproduced).
+- New tests: FR-GAU-1 TMST grid and c^2 identity; FR-GAU-2(c) combining-network threshold (V0 div_netthreshold, exact
+  reduction to eta*); FR-GAU-4 (a)-(d); FR-GAU-5 exclusion rule |y-(1+tau)| < 1e-9; FR-GAU-6 (c).
+- Tolerances centralised in `tests/tolerances.py`. 123 tests passing (incl. M0), 100% coverage; Q-1 and Q-2 closed.

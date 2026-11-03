@@ -17,3 +17,7 @@ BOUNDARY_EXCLUDE_Y = 1e-9  # FR-GAU-5: exclude |y - (1 + tau)| < this
 ATOL_TMST_THRESHOLD = 1e-8  # FR-GAU-6 (c)
 PHYS_EIG_ATOL = 1e-12  # TSD §5.1 physicality
 RTOL_ALGEBRA = 1e-12  # exact-algebra identities (associativity, §4.3, block form)
+ATOL_NETWORK_THRESHOLD = 1e-11  # FR-GAU-2 (c): combining-network threshold, direct root vs formula
+RTOL_COMPOSITION = 1e-12  # FR-GAU-2 (a),(b): associativity and §4.3 closed form
+ATOL_COMPOSITION_Y = 1e-12  # absolute floor on y when y -> 0 (eta -> 1)
+RTOL_STATE_BLOCK = 1e-14  # FR-GAU-3: block form after the channel (pure algebra)
