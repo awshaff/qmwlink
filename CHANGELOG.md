@@ -8,7 +8,7 @@
   tolerances centralised in `tests/tolerances.py`; Makefile `exp` stub.
 - Tests (initial): 19 passing (unit, hypothesis property, TSD §11 regression), coverage 100% on `src/`; ruff + mypy --strict clean.
 - TSD §11 table (n_th, eta*, 1-eta*) reproduced at 5/30/100/300 GHz.
-- Open findings: Q-1 (non-blocking) — FR-PHY-1 RJ error bound is slightly too tight.
+- Open findings: none (Q-1, the RJ error bound, was fixed in the spec by FSD v0.6).
 
 ## M1 — Gaussian core (FR-GAU-1..6)
 - Built: `gaussian/channels.py` (`PIChannel`, constructors, `@` composition, `apply_to_mode_b`,
@@ -18,7 +18,6 @@
 - Tests: 65 passing total (46 new), 100% coverage on `src/`, ruff + mypy --strict clean.
   TSD §10 identity/limit checks done: associativity, §4.3 closed form, general vs closed form,
   §5.4 condition vs `nu_-` on 10^4-point grids (r = 0.1, 0.8, 2), TMST vs TMSV reduction.
-- Resolved: Q-1 (FR-PHY-1 AC amended in docs/FSD.md per Aan, option B).
 - Open findings: none.
 
 ### M1 revision after spec v0.6 / TSD v0.4
