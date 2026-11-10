@@ -107,3 +107,16 @@
 - Tests: 368 total, ruff + mypy --strict clean. E5 now takes several minutes (k < 1 weather laws).
 - Preview (placeholders replaced by sourced inputs, E5, P_t = 0.2 W): rho between -36.6 and -12.0 dB over 13.9-96 GHz; equal-bandwidth
   rho between -1.17 and -0.28 dB, i.e. the RAR does not win anywhere on this grid, mainly through bandwidth and then noise.
+
+## M5 — Diversity and E7 (FR-DIV-1..4)
+- Built: `services/diversity.py` (`array_outage`, exact SC tail `sc_exact_tail` with domain error for x < 1/2, `sc_chernoff_bound`,
+  `sc_sample`, `cramer_rate` + numeric Legendre oracle, `exponent_bound`, `design_dimension` / `design_law_holds`, `n_req` by exponential
+  search + integer bisection), `experiments/e7.py`, `E7Config`, `configs/e7.yaml`; entry point now `{e3|e4|e5|e6|e7|e8}`.
+  MRC array outage reuses `SmallScale(n_elements=N)` and the compound PDT (ncx2 floor helper), so large N needs no new code.
+- Reference: all 12 `N_req` integers of FSD FR-DIV-3 (5/30/100/300 GHz x K = 0/10/100, eps = 1e-3) reproduced exactly (5 GHz K = 0: 20 017 832);
+  N and N-1 bracket the target. No discrepancy with the table, so nothing new in QUESTIONS.
+- Validation: N = 1 reduces to the single-element cdf/sf; Chernoff >= exact SC tail on x in [1/2, 1); Cramer rate R_K(1) = 0,
+  R_0 = a - 1 - ln a, equal to the numeric Legendre transform (K up to 100); exponent bound >= exact cdf; design law implies outage <= eps;
+  MRC sum-sampling vs array cdf (MC-agree, N = 1e6); sum vs per-element two-sample KS (N = 8); SC exact tail vs per-element MC; N > 64 error.
+- Found while testing: the Legendre oracle needed a wide search interval (optimal s is far below 0 for K = 100, a = 0.2); oracle fixed, closed form unchanged.
+- Tests: 392 total (all tiers), coverage 99%; ruff + mypy --strict clean. E7 runs in 3 s.

@@ -193,3 +193,24 @@ def test_cli_dispatch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("sys.argv", ["x", "e6", str(p), "--out", str(tmp_path / "r")])
     main()
     assert list((tmp_path / "r").glob("e6_*/*/data.csv"))
+
+
+def test_e7_run_matches_reference_table(tmp_path: Path) -> None:
+    from qmwlink.experiments import e7
+
+    out = e7.run(
+        _cfg(tmp_path, "e7", bands_ghz=[100, 300], eps=[1e-3],
+             n_grid={"start": 1, "stop": 1e5, "num": 8, "scale": "log"}),
+        tmp_path / "r",
+    )  # fmt: skip
+    rows = list(csv.DictReader((out / "nreq.csv").open()))
+    got = {(float(r["band_ghz"]), float(r["K"])): int(r["n_req"]) for r in rows}
+    ref = {(100.0, 0.0): 50243, (100.0, 10.0): 8737, (100.0, 100.0): 993,
+           (300.0, 0.0): 5630, (300.0, 10.0): 983, (300.0, 100.0): 112}  # fmt: skip
+    for key, n in ref.items():
+        assert got[key] == pytest.approx(n, rel=1e-3), key
+    for r in rows:
+        assert float(r["outage_at_n_req"]) <= 1e-3 < float(r["outage_at_n_req_minus_1"])
+    out_rows = list(csv.DictReader((out / "outage_vs_n.csv").open()))
+    assert out_rows and (out / "fig_outage_vs_n.png").exists()
+    assert json.loads((out / "meta.json").read_text())["all_finite"] is True
