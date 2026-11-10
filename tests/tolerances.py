@@ -34,3 +34,12 @@ ATOL_ETA_GEO = 1e-5  # FR-CH-6 (c): 0.93806
 ATOL_RANGE_M = 0.5  # FR-CH-6 (d): 555.47 m +/- 0.5
 MC_SEED = 20261103  # recorded seed for all MC tests (FSD §4.3)
 MC_N = 10**6
+
+# --- M3: receivers and entanglement service ------------------------------------------------
+ATOL_TN_REF = 1e-4  # FR-RX-3 (b): 0.9102 / 0.5000 / 1.0000
+RTOL_N_AMP_REF = 1e-3  # FR-RX-4 (a),(b): 3.438e5 / 1.719e5, +/-0.1%
+RTOL_T_N_REF = 1e-3  # FR-RX-4 (a): 8.25e4 K, +/-0.1%
+ATOL_ETA_STAR_RX_REF = 5e-6  # FR-SVC-E1: 0.99960 (5 s.f.), 0.999219 (6 s.f.)
+RTOL_ETA_STAR_ROOT = 1e-12  # FR-SVC-E1: closed form vs root-finding (additive noise)
+RTOL_P_OUT_QUAD = 1e-8  # FR-SVC-E2 (c): Cases 2-3 vs quadrature of the clamped cdf
+RTOL_RQ1_IDENTITY = 1e-12  # FR-SVC-E2 (e): P_out / P_out^surr = 1/Z

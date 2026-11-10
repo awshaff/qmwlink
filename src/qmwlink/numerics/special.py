@@ -9,6 +9,8 @@ by the pinned regression test ``test_ncx2_floor_tail``.
 
 from __future__ import annotations
 
+from functools import lru_cache
+
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
 from scipy import stats
@@ -19,12 +21,18 @@ NC_FLOOR = 1e-300
 """Lower bound on the noncentrality passed to ``scipy.stats.ncx2``."""
 
 
+@lru_cache(maxsize=512)
+def _frozen_cached(nu: float, lam: float) -> stats.rv_continuous:
+    return stats.ncx2(df=nu, nc=max(lam, NC_FLOOR))
+
+
 def _frozen(nu: float, lam: float) -> stats.rv_continuous:
+    """Validated, cached frozen distribution (construction costs ~0.6 ms; E3 profile)."""
     if not (np.isfinite(nu) and nu > 0):
         raise ValueError("nu must be finite and > 0")
     if not (np.isfinite(lam) and lam >= 0):
         raise ValueError("lam must be finite and >= 0")
-    return stats.ncx2(df=nu, nc=max(lam, NC_FLOOR))
+    return _frozen_cached(float(nu), float(lam))
 
 
 def ncx2_cdf(x: ArrayLike, nu: float, lam: float) -> FloatArray:
