@@ -15,7 +15,6 @@ import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 
 from qmwlink.channel.compound import CompoundPDT
-from qmwlink.channel.large_scale import ShiftedLogGamma
 from qmwlink.channel.link_budget import link_budget
 from qmwlink.channel.small_scale import SmallScale
 from qmwlink.experiments.common import save_fig, write_csv, write_meta
@@ -50,7 +49,7 @@ def compute(cfg: E3Config) -> list[E3Row]:
     """All grid points. ``E[E_N]`` is skipped (0) when the outage is exactly 1."""
     rows: list[E3Row] = []
     d_grid = cfg.distance_m.values()
-    st, lbc = cfg.large_scale.stochastic, cfg.link_budget
+    ls, lbc = cfg.large_scale, cfg.link_budget
     for band in cfg.bands_ghz:
         f_hz = band * 1e9
         gamma = cfg.large_scale.gamma_abs_per_m[band]
@@ -61,7 +60,7 @@ def compute(cfg: E3Config) -> list[E3Row]:
                     f_hz, float(d), lbc.A_t_m2, lbc.A_r_m2,
                     gamma_abs_per_m=gamma, coupling_model=model, g_enh=lbc.G_enh,
                 )  # fmt: skip
-                law = ShiftedLogGamma.from_moments(lb.psi0, st.mean, st.std**2)
+                law = ls.law(band, float(d), lb.psi0)
                 for k in cfg.small_scale["K"]:
                     svc = EntanglementService(
                         CompoundPDT(SmallScale(k, lb.eta_geo), law),
@@ -130,12 +129,15 @@ def run(config_path: str | Path, out_root: str | Path = "results") -> Path:
     )
     ylab = r"$\mathbb{E}[E_N]$ (ebit)"
     save_fig(_panel_figure(rows, cfg, "e_log_neg", ylab, True), out / "fig_e_n")
+    ls_ = cfg.large_scale
     write_meta(
         out / "meta.json", cfg.experiment, h,
         {"seed": cfg.seed, "n_rows": len(rows),
          "n_rows_with_entanglement": sum(r.e_log_neg > 0 for r in rows),
          "friis_clipped_physical": False,
-         "gamma_abs_sources": {str(k): v for k, v in cfg.large_scale.gamma_abs_source.items()}},
+         "per_link": ls_.per_link,
+         "gamma_abs_source": ls_.gamma_abs_source,
+         "stochastic_source": ls_.stochastic_source, "location_stat": "annual"},
     )  # fmt: skip
     logger.info("E3 written to %s", out)
     return out

@@ -1,0 +1,7 @@
+experiment: e6_bbr_crossover
+environment: {T_env_k: 300.0}
+f_ghz: {start: 1, stop: 300, num: 60, scale: log}
+delta_db: [1.0, 3.0]
+eta_ref: 0.0          # eta -> 0 reference (TSD §8.3)
+literature_rar: configs/literature_rar.yaml
+slope_fit_max_ghz: 30.0

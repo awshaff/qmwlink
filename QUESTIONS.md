@@ -70,7 +70,7 @@
   (mean 1e-3, std 5e-4), the apertures (2 m^2) and the E4 transducer classes (eta_t 0.8/0.6, n_t 0.01) are also placeholders.
 - Options: A) supply ITU-R P.676 values with sources; B) keep zeros and restrict claims to 5 GHz.
 - Recommendation: A, by Abdurrahman. Until then E3 absolute numbers above 5 GHz are optimistic and must not be quoted.
-- Status: open
+- Status: closed 2026-11-10: sourced inputs in configs/literature_q7_q11.yaml and TSD §16 (FSD v0.6.3 / TSD v0.4.3); implemented in M4 revision. Still [A]: apertures, P_t, B_LNA at 100 GHz, 300 GHz LNA, RAR bandwidths for Jing/Cai/She, Borowka sideband, Yang journal volume, full-path weather correlation (TSD §16.7)
 
 ## Q-8 [non-blocking] Meaning of E[nu~_-], E[F_opt], E[F_BK] in FR-SVC-E2
 - Context: `services/entanglement.py::EntanglementService.metrics`, TSD §8.1 ("E[nu~_-], E[F_opt], E[F_BK] likewise").
@@ -80,7 +80,7 @@
   B) full mean over all eta.
 - Recommendation: A (implemented, matches the literal formula and keeps the integration domain finite); the full mean is
   a one-line extension if wanted.
-- Status: open
+- Status: closed 2026-11-10: conditional averages (Abdurrahman's decision), TSD §8.1 / FSD v0.6.2; implemented as nu_minus_cond / fidelity_opt_cond / fidelity_bk_cond, NaN when 1-P_out < 1e-12
 
 ## Q-9 [finding] scipy `ncx2.sf` warns and may be unreliable for nc >~ 1e10
 - Context: `numerics/special.ncx2_sf`, FR-CH-1, K -> infinity limit tests (FR-SVC-E2 Case 1).
@@ -88,4 +88,23 @@
   the cdf in the bulk and lower tail matched Phi to 4 digits at K up to 1e10. Tests use K = 1e9, which is warning-free.
 - Options: A) document the limit (K <= 1e9 for the sf upper tail); B) add a normal-approximation guard.
 - Recommendation: A for now; no configured experiment uses K above 100.
-- Status: open
+- Status: closed 2026-11-10: accepted as a documented limit (K <= 1e9, TSD §6.1); RuntimeWarning promoted to an error in pytest (pyproject filterwarnings)
+
+## Q-10 [non-blocking] "Smallest N_amp" in the capacity-based crossover (TSD §8.3)
+- Context: `services/crossover.py::crossover_capacity`, FR-SVC-C4.
+- Observation: TSD §8.3 says "smallest N_amp with C_rx >= (1-delta) C_het". C_rx is non-increasing in N_amp, so every
+  N_amp down to 1/2 satisfies the constraint and "smallest" is trivially 1/2 (ssb) or infeasible (dsb). The meaningful
+  quantity is the largest tolerable N_amp, which is what the dB-penalty closed form also returns.
+- Options: A) largest N_amp with C_rx >= (1-delta) C_het (implemented); B) literal "smallest" (trivial).
+- Recommendation: A; please confirm and fix the TSD wording.
+- Status: closed 2026-11-10: option A (largest tolerable N_amp), TSD §8.3 / FSD FR-SVC-C4 (f)
+
+## Q-11 [non-blocking] E5/E6/E8 placeholder inputs
+- Context: `configs/e5.yaml`, `configs/e8.yaml`, `configs/literature_rar.yaml`, FR-SVC-C5 (d), FR-EXP-7.
+- Observation: all per-band RAR (S_E, B) and LNA (T_n, B) values, P_t, N_s and the E8 receivers are `[A]` illustrative
+  placeholders with `source: "[A] placeholder"`; `literature_rar.yaml` is empty (E6 renders without the overlay and warns).
+  With the placeholder bandwidths (RAR 1 MHz, LNA 100 MHz) the E5 map is bandwidth-limited everywhere (rho about -19 dB,
+  no rho = 0 contour); this reflects the inputs, not a result. Same absorption/aperture/stochastic-loss placeholders as Q-7.
+- Options: A) supply sourced RAR/LNA values and literature points; B) keep placeholders and quote nothing absolute.
+- Recommendation: A, by Abdurrahman, together with Q-7.
+- Status: closed 2026-11-10: sourced RAR / LNA / bandwidth / P_t inputs in TSD §16.3-16.4 and configs/literature_q7_q11.yaml; E5 adds the equal-bandwidth case

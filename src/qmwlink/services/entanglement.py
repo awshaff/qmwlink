@@ -94,17 +94,31 @@ def eta_star_numeric(n_th: float, front_end: PIChannel, r: float, n_jpa: float =
 
 
 # ---- E2: metrics over the compound PDT ------------------------------------------------------
+NO_ENTANGLED_REASON = "no entangled realizations"
+ONE_MINUS_P_OUT_MIN = 1e-12
+"""Below this ``1 - P_out`` the conditional averages are ``NaN`` (TSD §8.1, Q-8)."""
+
+
 @dataclass(frozen=True)
 class EntanglementMetrics:
-    """Entanglement metrics over a compound PDT. (FR-SVC-E2)
+    """Entanglement metrics over a compound PDT. (FR-SVC-E2, TSD §8.1, Q-8)
 
-    The ``e_*`` fields are ``int_{eta*}^1 g(eta) f(eta) d eta`` (restricted to entangled
-    realizations; divide by ``1 - p_out`` for the conditional mean).
+    ``log_neg`` is the unconditional mean ``E[E_N]``. ``nu_minus_cond``, ``fidelity_opt_cond``
+    and ``fidelity_bk_cond`` are conditional on the link working,
+    ``E[g | eta > eta*_rx] = (1/(1-P_out)) int_{eta*}^1 g f``; they are ``NaN`` with
+    ``reason`` when ``1 - P_out < 1e-12``. ``one_minus_p_out`` is always reported next to them.
+    The bare restricted integrals ``e_*`` are internal (never reported).
     """
 
     eta_star: float
     p_out: float
-    e_log_neg: float
+    one_minus_p_out: float
+    log_neg: float
+    log_neg_cond: float
+    nu_minus_cond: float
+    fidelity_opt_cond: float
+    fidelity_bk_cond: float
+    reason: str
     e_nu_minus: float
     e_fidelity_opt: float
     e_fidelity_bk: float
@@ -185,20 +199,30 @@ class EntanglementService:
         v = a + (ch.tau_arr * a + ch.y_arr) - 2.0 * np.sqrt(ch.tau_arr) * c
         return np.asarray(1.0 / (1.0 + v / 2.0), dtype=np.float64)
 
+    def one_minus_p_out(self) -> float:
+        """``1 - P_out`` from the survival function (no subtraction near 1)."""
+        es = self.eta_star
+        if es >= 1.0:
+            return 0.0
+        if es <= 0.0:
+            return 1.0
+        return float(self.compound.sf(es))
+
     def metrics(self) -> EntanglementMetrics:
         """All E2 metrics (nested quadrature in Psi-space; see :meth:`expect_entangled`)."""
         es = self.eta_star
         p = self.p_out()
-        if es >= 1.0:
-            return EntanglementMetrics(es, 1.0, 0.0, 0.0, 0.0, 0.0)
-        return EntanglementMetrics(
-            es,
-            p,
-            self.expect_entangled(lambda e: log_negativity(self.nu_minus(e))),
-            self.expect_entangled(self.nu_minus),
-            self.expect_entangled(lambda e: fidelity_opt(self.nu_minus(e))),
-            self.expect_entangled(self.fidelity_bk_at),
-        )
+        q = self.one_minus_p_out()
+        nan = float("nan")
+        if es >= 1.0 or q < ONE_MINUS_P_OUT_MIN:
+            return EntanglementMetrics(
+                es, p, q, 0.0, nan, nan, nan, nan, NO_ENTANGLED_REASON, nan, nan, nan
+            )
+        en = self.expect_entangled(lambda e: log_negativity(self.nu_minus(e)))
+        nu = self.expect_entangled(self.nu_minus)
+        fo = self.expect_entangled(lambda e: fidelity_opt(self.nu_minus(e)))
+        fb = self.expect_entangled(self.fidelity_bk_at)
+        return EntanglementMetrics(es, p, q, en, en / q, nu / q, fo / q, fb / q, "", nu, fo, fb)
 
     # ---- nested quadrature -------------------------------------------------------------------
     def expect_entangled(self, g: Callable[[FloatArray], FloatArray]) -> float:
