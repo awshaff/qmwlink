@@ -42,3 +42,13 @@
 - Tests: 226 total, 99.8% coverage on `src/`, ruff + mypy --strict clean. The slow tier (mpmath, MC) takes ~90 s.
 - Open findings: Q-3 (scipy central chi2 cdf inaccurate in far lower tail at large N; worked around),
   Q-4 (G_enh scope), Q-5 (ncx2.pdf nan far from the mean; worked around).
+
+### M2 revision after spec TSD v0.4.1 / FSD v0.6.1 (closes Q-3, Q-4, Q-5)
+- `numerics/special.py`: `ncx2` floor helper (`NC_FLOOR = 1e-300`, cdf/sf/pdf/ppf, regularized gamma wrappers); every
+  `SmallScale` cdf/sf/pdf/ppf now goes through it. Pinned `test_ncx2_floor_tail` (four N, both tails, rtol 1e-6).
+- `SmallScale`: adaptive moment window with neglected-mass check (`moment_window`, `neglected_mass`; cap 320 sd then raise),
+  `surrogate_cdf` (RQ1, flagged non-physical). `ShiftedLogGamma` routes k > 1e5 through the helper.
+- `link_budget`: single receive-side `g_enh` (>= 1); `g_enh_tx`/`g_enh_rx` removed.
+- `large_scale`: `matched_laws` (RQ2 moment matching), `LogNormalV0.sample_eta_clipped` (`eta_gt1: clip`, returns the mass).
+- Tests: 245 total (all tiers, ~200 s), coverage 99.9%; ruff + mypy --strict clean; mpmath reference extended to N = 1e8 (K = 0).
+- Deferred to M3 (needs the service layer): FR-SVC-E2 RQ1 outage identity, FR-CH-3 (b) in terms of P_out / ergodic capacity.

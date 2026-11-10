@@ -69,19 +69,33 @@ def test_other_tsd_references() -> None:
     assert fresnel_product(a_t, a_r, lam, 10.0) == pytest.approx(3.4e-4, rel=0.02)
 
 
-def test_enhancement_factors_scale_apertures() -> None:
+def test_g_enh_scales_receive_aperture_only() -> None:
+    """FR-CH-6 (e): tau^2 linear in G_enh; goubau eta_geo increases and stays < 1."""
     base = link_budget(5e9, 10.0, 0.1, 0.1, gamma_abs_per_m=0.0)
-    enh = link_budget(5e9, 10.0, 0.1, 0.1, gamma_abs_per_m=0.0, g_enh_tx=4.0, g_enh_rx=2.5)
-    assert enh.tau2 == pytest.approx(10.0 * base.tau2)
-    assert enh.a_t_m2 == pytest.approx(0.4) and enh.a_r_m2 == pytest.approx(0.25)
+    prev = base.eta_geo
+    for g in (2.5, 10.0, 1e3, 1e6):
+        enh = link_budget(5e9, 10.0, 0.1, 0.1, gamma_abs_per_m=0.0, g_enh=g)
+        assert enh.tau2 == pytest.approx(g * base.tau2, rel=1e-12)
+        assert enh.a_t_m2 == pytest.approx(0.1) and enh.a_r_m2 == pytest.approx(0.1 * g)
+        assert prev < enh.eta_geo < 1.0 or enh.eta_geo == pytest.approx(1.0)
+        prev = enh.eta_geo
+
+
+def test_no_transmit_side_enhancement_argument() -> None:
+    import inspect
+
+    params = inspect.signature(link_budget).parameters
+    assert "g_enh" in params and not any(p.startswith("g_enh_") for p in params)
+    with pytest.raises(TypeError):
+        link_budget(5e9, 10.0, 1.0, 1.0, gamma_abs_per_m=0.0, g_enh_tx=2.0)  # type: ignore[call-arg]
 
 
 def test_validation_errors() -> None:
     kw = {"gamma_abs_per_m": 0.0}
     with pytest.raises(ValueError, match="f_hz"):
         link_budget(0.0, 10.0, 1.0, 1.0, **kw)
-    with pytest.raises(ValueError, match="enhancement"):
-        link_budget(5e9, 10.0, 1.0, 1.0, g_enh_rx=0.5, **kw)
+    with pytest.raises(ValueError, match="g_enh"):
+        link_budget(5e9, 10.0, 1.0, 1.0, g_enh=0.5, **kw)
     with pytest.raises(ValueError, match="gamma_abs"):
         link_budget(5e9, 10.0, 1.0, 1.0, gamma_abs_per_m=-1.0)
     with pytest.raises(ValueError, match="coupling_model"):

@@ -202,11 +202,67 @@ def test_sample_elements_rejects_large_n_naming_sample_sum() -> None:
 def test_moment_raises_on_nonfinite_pdf() -> None:
     """The quadrature never integrates a nan silently (TSD §13 rule 6)."""
 
-    class Broken:
-        def pdf(self, x: float) -> float:
-            return float("nan")
-
     s = SmallScale(10.0, ETA_BAR)
-    s.__dict__["_dist"] = Broken()  # cached_property slot
+    s.__dict__["_spdf"] = lambda x: np.nan  # shadow the pdf helper on the instance
     with pytest.raises(FloatingPointError, match="non-finite"):
         s.moment(1)
+
+
+# ---- v0.6.1 additions: FR-CH-1 (c), (e), adaptive window, helper validation ------------------
+
+
+def test_moment_k0_n1_small_eta_bar_closed_form() -> None:
+    """FR-CH-1 (c): K = 0, N = 1, eta_bar = 0.01; truncated exponential, rtol 1e-10."""
+    eb = 0.01
+    s = SmallScale(0.0, eb, 1)
+    a = 1.0 / eb  # eta ~ Exp(rate a) truncated to [0, 1]
+    z = -np.expm1(-a)
+    m1 = (1.0 - np.exp(-a) * (1.0 + a)) / (a * z)
+    m2 = (2.0 - np.exp(-a) * (a * a + 2.0 * a + 2.0)) / (a * a * z)
+    assert s.moment(1) == pytest.approx(m1, rel=1e-10)
+    assert s.moment(2) == pytest.approx(m2, rel=1e-10)
+
+
+def test_moment_window_adapts_and_meets_mass_tolerance() -> None:
+    s = SmallScale(0.0, 0.01, 1)  # fixed 20 sd would leave ~7.6e-10 out
+    lo, hi, w = s.moment_window()
+    assert w > 20.0
+    assert s.neglected_mass(lo, hi) <= 1e-14 * s.z
+    assert SmallScale(10.0, 0.9, 5).moment_window()[2] == 20.0
+
+
+def test_moment_window_cap_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    s = SmallScale(0.0, 0.01, 1)
+    monkeypatch.setattr(SmallScale, "neglected_mass", lambda self, lo, hi: 1.0)
+    with pytest.raises(ValueError, match="neglected mass"):
+        s.moment_window()
+
+
+@pytest.mark.parametrize(("K", "eb", "n"), [(0.0, 0.99, 1), (10.0, 0.95, 3), (100.0, 0.999, 1)])
+def test_surrogate_cdf_over_z_equals_truncated_cdf(K: float, eb: float, n: int) -> None:
+    """FR-CH-1 (e): surrogate_cdf / Z = truncated cdf for x < 1, rtol 1e-12."""
+    s = SmallScale(K, eb, n)
+    x = np.linspace(0.05, 0.9999, 60)
+    np.testing.assert_allclose(s.surrogate_cdf(x) / s.z, s.cdf(x), rtol=1e-12)
+    assert s.surrogate_physical is False
+    assert float(s.surrogate_cdf(5.0)) > float(s.surrogate_cdf(1.0)) > 0.0
+    assert float(s.surrogate_cdf(-1.0)) == 0.0
+
+
+def test_special_helper_validation() -> None:
+    from qmwlink.numerics.special import (
+        gamma_lower_regularized,
+        gamma_upper_regularized,
+        ncx2_cdf,
+        ncx2_pdf,
+    )
+
+    with pytest.raises(ValueError, match="nu"):
+        ncx2_cdf(1.0, 0.0, 0.0)
+    with pytest.raises(ValueError, match="lam"):
+        ncx2_cdf(1.0, 2.0, -1.0)
+    assert float(ncx2_pdf(1.0, 2.0, 0.0)) == pytest.approx(0.5 * np.exp(-0.5), rel=1e-12)
+    u = np.array([0.5, 3.0])
+    np.testing.assert_allclose(
+        gamma_lower_regularized(4.0, u) + gamma_upper_regularized(4.0, u), 1.0, atol=1e-14
+    )

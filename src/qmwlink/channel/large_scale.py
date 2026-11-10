@@ -12,7 +12,12 @@ import numpy as np
 from numpy.typing import ArrayLike, NDArray
 from scipy import special, stats
 
+from qmwlink.numerics.special import gamma_lower_regularized, gamma_upper_regularized
+
 FloatArray = NDArray[np.float64]
+
+LARGE_SHAPE = 1e5
+"""Shape above which ``gammainc``/``gammaincc`` go through the ``ncx2`` floor helper (TSD §6.2)."""
 
 BREAK_SIGMAS = (-6, -3, -1, 0, 1, 3, 6)
 """Quadrature breakpoints at ``center + j * sigma`` (TSD §6.4)."""
@@ -148,18 +153,24 @@ class ShiftedLogGamma(LargeScaleLaw):
     def psi_cdf(self, psi: ArrayLike) -> FloatArray:
         """``P(Psi <= psi) = P(k, u/theta)`` (regularized lower incomplete gamma)."""
         u = np.asarray(psi, dtype=np.float64) - self.psi0
-        return np.asarray(
-            np.where(u > 0, special.gammainc(self.k, np.maximum(u, 0.0) / self.theta), 0.0),
-            dtype=np.float64,
+        z = np.maximum(u, 0.0) / self.theta
+        p = (
+            gamma_lower_regularized(self.k, z)
+            if self.k > LARGE_SHAPE
+            else special.gammainc(self.k, z)
         )
+        return np.asarray(np.where(u > 0, p, 0.0), dtype=np.float64)
 
     def psi_sf(self, psi: ArrayLike) -> FloatArray:
         """``P(Psi >= psi) = Q(k, u/theta)``; equals 1 for ``u <= 0`` (``gammaincc``)."""
         u = np.asarray(psi, dtype=np.float64) - self.psi0
-        return np.asarray(
-            np.where(u > 0, special.gammaincc(self.k, np.maximum(u, 0.0) / self.theta), 1.0),
-            dtype=np.float64,
+        z = np.maximum(u, 0.0) / self.theta
+        q = (
+            gamma_upper_regularized(self.k, z)
+            if self.k > LARGE_SHAPE
+            else special.gammaincc(self.k, z)
         )
+        return np.asarray(np.where(u > 0, q, 1.0), dtype=np.float64)
 
     def psi_lo_eff(self) -> float:
         return self.psi0
@@ -273,6 +284,14 @@ class LogNormalV0(LargeScaleLaw):
     def sample_psi(self, rng: np.random.Generator, size: int) -> FloatArray:
         return np.asarray(rng.normal(self.psi_bar, self.sigma_psi, size=size), dtype=np.float64)
 
+    def sample_eta_clipped(self, rng: np.random.Generator, size: int) -> tuple[FloatArray, float]:
+        """Policy ``eta_gt1: clip``: ``min(eta_l, 1)`` and the affected mass. (TSD §6.2, FR-CH-3)
+
+        Returns the clipped samples and the analytic clipped mass ``mass_above_one()``. Results
+        built from these samples are ``physical = False`` and must report that mass.
+        """
+        return np.minimum(self.sample_eta(rng, size), 1.0), self.mass_above_one()
+
 
 @dataclass(frozen=True)
 class ConditionedLogNormal(LargeScaleLaw):
@@ -331,3 +350,23 @@ class ConditionedLogNormal(LargeScaleLaw):
             ),
             dtype=np.float64,
         )
+
+
+def matched_laws(
+    psi0: float, mu_g: float, sigma_g: float
+) -> tuple[ShiftedLogGamma | DeterministicLoss, LogNormalV0, ConditionedLogNormal]:
+    """RQ2 law set sharing the first two moments of ``Psi`` and the same ``Psi0``. (FR-CH-3 (a))
+
+    ``Psi_bar = psi0 + mu_g`` and ``sigma_Psi = sigma_g`` for all three laws. The conditioned
+    log-normal matches only *before* conditioning; its post-conditioning moments differ.
+    ``sigma_g = 0`` is the deterministic limit, where only the log-gamma point mass exists, so it
+    raises here (use ``DeterministicLoss`` directly; the baselines need ``sigma_psi > 0``).
+    """
+    if sigma_g <= 0:
+        raise ValueError("sigma_g must be > 0 (deterministic limit: use DeterministicLoss)")
+    psi_bar = psi0 + mu_g
+    return (
+        ShiftedLogGamma.from_moments(psi0, mu_g, sigma_g**2),
+        LogNormalV0(psi_bar, sigma_g),
+        ConditionedLogNormal(psi_bar, sigma_g),
+    )

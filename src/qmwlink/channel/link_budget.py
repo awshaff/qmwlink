@@ -69,22 +69,23 @@ def link_budget(
     *,
     gamma_abs_per_m: float,
     coupling_model: CouplingModel = "goubau",
-    g_enh_tx: float = 1.0,
-    g_enh_rx: float = 1.0,
+    g_enh: float = 1.0,
 ) -> LinkBudget:
     """Mean collection efficiency and absorption for one link. (FR-CH-6, TSD §6.5)
 
-    ``g_enh_tx`` / ``g_enh_rx`` (``>= 1``) multiply the corresponding aperture for
-    field-confining structures. ``gamma_abs_per_m`` is required (no hidden default).
+    ``a_r_m2`` is the collecting aperture of an antenna-fed receiver (default) or ``A_e`` of a
+    bare cell. ``g_enh`` (``>= 1``, receive side only, TSD §6.5) gives ``A_r,eff = g_enh * A_r``;
+    there is no transmit-side factor (transmit gain is in ``a_t_m2``). Leave ``g_enh = 1`` for an
+    antenna-fed receiver, else the area is counted twice. ``gamma_abs_per_m`` is required.
     """
     if f_hz <= 0:
         raise ValueError("f_hz must be > 0")
-    if g_enh_tx < 1 or g_enh_rx < 1:
-        raise ValueError("enhancement factors must be >= 1")
+    if not g_enh >= 1:
+        raise ValueError("g_enh must be >= 1 (loss in a feed is an attenuator, not g_enh < 1)")
     if gamma_abs_per_m < 0:
         raise ValueError("gamma_abs_per_m must be >= 0")
     lam = C / f_hz
-    at, ar = a_t_m2 * g_enh_tx, a_r_m2 * g_enh_rx
+    at, ar = a_t_m2, a_r_m2 * g_enh
     tau2 = fresnel_product(at, ar, lam, d_m)
     if coupling_model == "goubau":
         eta, physical = goubau_efficiency(tau2), True

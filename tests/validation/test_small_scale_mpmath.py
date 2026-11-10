@@ -13,7 +13,7 @@ from qmwlink.channel.small_scale import SmallScale
 pytestmark = pytest.mark.slow
 
 
-@pytest.mark.parametrize(("n", "K"), [(10**5, 10.0), (10**7, 0.0), (10**7, 1.0)])
+@pytest.mark.parametrize(("n", "K"), [(10**5, 10.0), (10**7, 0.0), (10**7, 1.0), (10**8, 0.0)])
 def test_cdf_sf_vs_mpmath(n: int, K: float) -> None:
     """3 points per function for N in {1e5, 1e7}: 1% relative, including a ~1e-8 lower tail."""
     s = SmallScale(K, 0.9999, n)

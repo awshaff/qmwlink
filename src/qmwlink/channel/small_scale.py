@@ -11,15 +11,20 @@ from functools import cached_property
 
 import numpy as np
 from numpy.typing import ArrayLike, NDArray
-from scipy import stats
 
 from qmwlink.numerics.integrate import checked_quad
 from qmwlink.numerics.sampling import rejection_sample
+from qmwlink.numerics.special import NC_FLOOR, ncx2_cdf, ncx2_pdf, ncx2_ppf, ncx2_sf
 
 FloatArray = NDArray[np.float64]
 
-CENTRAL_NC = 1e-300
-"""Vanishing noncentrality standing in for the central chi-square (K = 0)."""
+CENTRAL_NC = NC_FLOOR
+"""Alias of :data:`qmwlink.numerics.special.NC_FLOOR` (kept for backwards compatibility)."""
+
+W_START = 20.0
+W_CAP = 320.0
+MASS_TOL = 1e-14
+"""Adaptive moment window: start, cap (sd) and neglected-mass tolerance (TSD §6.1)."""
 
 N_MAX_ELEMENTS = 64
 """Default cap for :meth:`SmallScale.sample_elements` (TSD §6.1)."""
@@ -69,25 +74,26 @@ class SmallScale:
         """Noncentrality ``2NK``."""
         return 2.0 * self.n_elements * self.K
 
-    @cached_property
-    def _dist(self) -> stats.rv_continuous:
-        # K = 0: scipy's central chi2/gammainc is inaccurate in the far lower tail for
-        # large N (rel. error 1.6e-6 at N=1e6, 2.3% at N=1e7 for the 1e-8 tail; QUESTIONS Q-3),
-        # and ncx2 with nc = 0 silently delegates to it. ncx2 with a vanishing positive nc
-        # is the same distribution (agrees to 1e-15 at small N) and is accurate to ~1e-13.
-        return stats.ncx2(df=self.nu, nc=max(self.nc, CENTRAL_NC))
+    def _scdf(self, x: ArrayLike) -> FloatArray:
+        return ncx2_cdf(x, self.nu, self.nc)
+
+    def _ssf(self, x: ArrayLike) -> FloatArray:
+        return ncx2_sf(x, self.nu, self.nc)
+
+    def _spdf(self, x: ArrayLike) -> FloatArray:
+        return ncx2_pdf(x, self.nu, self.nc)
 
     @cached_property
     def z(self) -> float:
         """Truncation normalizer ``Z_{K,N} = F_{chi'^2}(x_max)`` (= sampler acceptance rate)."""
-        return float(self._dist.cdf(self.x_max))
+        return float(self._scdf(self.x_max))
 
     # ---- distribution functions --------------------------------------------------------
     def pdf(self, x: ArrayLike) -> FloatArray:
         """Density on ``[0, 1]`` (zero elsewhere). (FR-CH-1)"""
         xx = np.asarray(x, dtype=np.float64)
         inside = (xx >= 0.0) & (xx <= 1.0)
-        val = self._dist.pdf(np.where(inside, xx, 0.0) / self.sigma2) / (self.sigma2 * self.z)
+        val = self._spdf(np.where(inside, xx, 0.0) / self.sigma2) / (self.sigma2 * self.z)
         return np.asarray(np.where(inside, val, 0.0), dtype=np.float64)
 
     def cdf(self, x: ArrayLike) -> FloatArray:
@@ -97,8 +103,19 @@ class SmallScale:
         """
         xx = np.asarray(x, dtype=np.float64)
         xc = np.clip(xx, 0.0, 1.0)
-        val = np.minimum(self._dist.cdf(xc / self.sigma2) / self.z, 1.0)
+        val = np.minimum(self._scdf(xc / self.sigma2) / self.z, 1.0)
         return np.asarray(np.where(xx >= 1.0, 1.0, np.where(xx <= 0.0, 0.0, val)), dtype=np.float64)
+
+    def surrogate_cdf(self, x: ArrayLike) -> FloatArray:
+        """Untruncated surrogate cdf ``F_chi'^2(x/sigma^2)``, no ``Z``, no clamp. NON-PHYSICAL.
+
+        RQ1 only (``physical = False``): for a deterministic large-scale factor,
+        ``F(x) = surrogate_cdf(x) / Z`` for ``x < 1``; the removed mass is ``1 - Z``. (TSD §6.1)
+        """
+        xx = np.maximum(np.asarray(x, dtype=np.float64), 0.0)
+        return self._scdf(xx / self.sigma2)
+
+    surrogate_physical = False
 
     def sf(self, x: ArrayLike) -> FloatArray:
         """Survival ``P(eta_s > x)``, computed in the smaller tail. (FR-CH-1, TSD §6.1, §13 rule 1)
@@ -109,7 +126,7 @@ class SmallScale:
         xx = np.asarray(x, dtype=np.float64)
         xc = np.clip(xx, 0.0, 1.0)
         f = self.cdf(xc)
-        upper = (self._dist.sf(xc / self.sigma2) - self._dist.sf(self.x_max)) / self.z
+        upper = (self._ssf(xc / self.sigma2) - self._ssf(self.x_max)) / self.z
         val = np.where(f < 0.5, 1.0 - f, np.maximum(upper, 0.0))
         return np.asarray(np.where(xx >= 1.0, 0.0, np.where(xx <= 0.0, 1.0, val)), dtype=np.float64)
 
@@ -118,30 +135,55 @@ class SmallScale:
         qq = np.asarray(q, dtype=np.float64)
         if np.any((qq < 0.0) | (qq > 1.0)):
             raise ValueError("q must be in [0, 1]")
-        val = self._dist.ppf(qq * self.z) * self.sigma2
+        val = ncx2_ppf(qq * self.z, self.nu, self.nc) * self.sigma2
         return np.asarray(np.where(qq >= 1.0, 1.0, np.minimum(val, 1.0)), dtype=np.float64)
 
     # ---- moments -----------------------------------------------------------------------
+    def neglected_mass(self, x_lo: float, x_hi: float) -> float:
+        """``M_out``: surrogate mass inside ``[0, x_max]`` but outside ``[x_lo, x_hi]``."""
+        out = float(self._scdf(x_lo)) if x_lo > 0.0 else 0.0
+        if x_hi < self.x_max:
+            out += float(self._ssf(x_hi) - self._ssf(self.x_max))
+        return max(out, 0.0)
+
+    def moment_window(self) -> tuple[float, float, float]:
+        """Adaptive ``X``-space window ``(x_lo, x_hi, w)`` with ``M_out <= 1e-14 Z``. (TSD §6.1)
+
+        Starts at ``w = 20`` surrogate sd about the mean and doubles ``w`` (cap 320, then raises)
+        until the neglected mass is at most ``MASS_TOL * Z``.
+        """
+        mean = self.nu + self.nc
+        sd = float(np.sqrt(2.0 * (self.nu + 2.0 * self.nc)))
+        w = W_START
+        while True:
+            lo = max(0.0, mean - w * sd)
+            hi = min(self.x_max, mean + w * sd)
+            if self.neglected_mass(lo, hi) <= MASS_TOL * self.z:
+                return lo, hi, w
+            if w >= W_CAP:
+                raise ValueError(
+                    f"moment window: neglected mass above {MASS_TOL:g} Z at w = {w:g} sd"
+                )
+            w = min(2.0 * w, W_CAP)
+
     def moment(self, m: int | float) -> float:
         """Truncated moment ``E^QC[eta_s^m]`` by checked quadrature. (FR-CH-1, TSD §6.1)
 
-        Integrates ``(x/x_max)^m f_chi'^2(x)`` over ``[0, x_max]`` with breakpoints at the
-        surrogate mean +/- j std, then divides by the m = 0 integral (= ``Z``).
+        Integrates ``(x/x_max)^m f_chi'^2(x)`` over the adaptive window of
+        :meth:`moment_window` (breakpoints at the surrogate mean +/- j sd) and divides by the
+        ``m = 0`` integral. Any non-finite pdf value in the window raises; it is never masked.
         """
         if m < 0:
             raise ValueError("m must be >= 0")
         mean = self.nu + self.nc
         sd = float(np.sqrt(2.0 * (self.nu + 2.0 * self.nc)))
         xm = self.x_max
-        # ncx2.pdf can return nan ~27 sd from the mean for huge N or K; the true density there is
-        # < 1e-80, so integrate over mean +/- 20 sd (clipped to [0, x_max]) instead of masking it.
-        lo = max(0.0, mean - 20.0 * sd)
-        hi = min(xm, mean + 20.0 * sd)  # x_max can be thousands of sd above the mean (large K)
+        lo, hi, _ = self.moment_window()
         pts = [mean + j * sd for j in (-6, -3, -1, 0, 1, 3, 6)]
 
         def integral(power: float) -> float:
             def integrand(t: float) -> float:
-                v = float((t / xm) ** power * self._dist.pdf(t))
+                v = float((t / xm) ** power * self._spdf(t))
                 if not np.isfinite(v):
                     raise FloatingPointError(f"non-finite chi'^2 pdf at x = {t!r}")
                 return v

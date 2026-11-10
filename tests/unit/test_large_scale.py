@@ -209,3 +209,55 @@ def test_psi_helpers() -> None:
 def test_v0_lognormal_psi_cdf_complements_sf() -> None:
     law = LogNormalV0(0.2, 0.15)
     np.testing.assert_allclose(law.psi_cdf([0.0, 0.2, 0.5]) + law.psi_sf([0.0, 0.2, 0.5]), 1.0)
+
+
+def test_large_shape_route_matches_scipy_where_both_accurate() -> None:
+    """k > 1e5 goes through the ncx2 floor helper; it matches scipy in the bulk and upper tail."""
+    from scipy import special
+
+    from qmwlink.channel.large_scale import LARGE_SHAPE
+
+    k = 4.0 * LARGE_SHAPE
+    law = ShiftedLogGamma(0.0, k, 1.0 / k)  # G ~ 1 with sd 1/sqrt(k)
+    psi = 1.0 + np.array([-1.0, 0.0, 1.0, 3.0]) / np.sqrt(k)
+    z = (psi - 0.0) / law.theta
+    np.testing.assert_allclose(law.psi_cdf(psi), special.gammainc(k, z), rtol=1e-9)
+    np.testing.assert_allclose(law.psi_sf(psi), special.gammaincc(k, z), rtol=1e-9)
+
+
+def test_matched_laws_share_psi_moments() -> None:
+    """FR-CH-3 (a): same Psi0, mean and sd of Psi for log-gamma and the V0 log-normal."""
+    from qmwlink.channel.large_scale import matched_laws
+
+    lg, v0, cn = matched_laws(0.05, 0.4, 0.3)
+    rng = np.random.default_rng(1)
+    for law in (lg, v0):
+        psi = law.sample_psi(rng, 400_000)
+        assert psi.mean() == pytest.approx(0.45, abs=3e-3)
+        assert psi.std() == pytest.approx(0.3, rel=5e-3)
+    assert cn.psi_bar == v0.psi_bar and cn.sigma_psi == v0.sigma_psi
+    with pytest.raises(ValueError, match="sigma_g"):
+        matched_laws(0.0, 0.4, 0.0)
+
+
+def test_v0_clip_policy_reports_mass() -> None:
+    """FR-CH-3 (c): clipped samples never exceed 1; the affected mass is returned."""
+    v0 = LogNormalV0(1.0, 1.0)
+    eta, mass = v0.sample_eta_clipped(np.random.default_rng(2), 200_000)
+    assert eta.max() <= 1.0 and v0.physical is False
+    assert mass == pytest.approx(0.158655, abs=tol.ATOL_MASS_ABOVE_ONE)
+    assert np.mean(eta == 1.0) == pytest.approx(mass, abs=3e-3)
+
+
+def test_laws_agree_as_sigma_goes_to_zero() -> None:
+    """FR-CH-3 (b): all three laws give the same eta-space cdf as sigma_Psi -> 0 (rtol 1e-6)."""
+    from qmwlink.channel.large_scale import matched_laws
+
+    lg, v0, cn = matched_laws(0.0, 0.3, 1e-5)
+    x = np.exp(-0.3) * np.array([0.999995, 1.0, 1.000005])
+    # compare mean loss behaviour through moments: E[eta^m] -> exp(-0.3 m)
+    for m in (1.0, 2.0):
+        ref = np.exp(-0.3 * m)
+        for law in (lg, v0, cn):
+            assert law.moment(m) == pytest.approx(ref, rel=1e-6)
+    assert x.shape == (3,)

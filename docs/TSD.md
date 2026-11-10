@@ -1,6 +1,6 @@
 # TSD — Technical Specification
 
-**Project:** `qmwlink` · **Version:** 0.4 (2026-11-03; pairs with FSD v0.6; §14 is a pure-Python receiver physics model, no compiled code) · **Owner:** Abdurrahman
+**Project:** `qmwlink` · **Version:** 0.4.1 (2026-11-10; pairs with FSD v0.6.1; §14 is a pure-Python receiver physics model, no compiled code) · **Owner:** Abdurrahman
 **Reads with:** `docs/IDEA.md` (why), `docs/FSD.md` (what). This document is the single source of truth for formulas, algorithms, numerics, code identifiers and code layout. If code and TSD disagree, the code is wrong or the TSD needs a reviewed change; never silently diverge. FSD and TSD versions are bumped together.
 
 Status tags used below:
@@ -162,13 +162,21 @@ Parameters: $K\ge0$, scale $\bar\eta$ ($=\bar\eta_s$ for $N=1$, $=\bar\eta_\Sigm
 - pdf on $[0,1]$: $f(\eta)=f_{\chi'^2}(\eta/\sigma_N^2)/(\sigma_N^2\,\mathcal Z)$.
 - cdf: $F(x)=F_{\chi'^2}(\min(x,1)/\sigma_N^2)/\mathcal Z$ (the clamp is mandatory; $F(x)=1$ for $x\ge1$).
 - survival (use this near 1): $S(x)=\big[S_{\chi'^2}(x/\sigma_N^2)-S_{\chi'^2}(x_{\max})\big]/\mathcal Z$ for $x<1$; compute in the tail that is smaller and switch accordingly.
-- $K=0$: use `scipy.stats.chi2` (or `gamma(N, scale=2σ²)`), not `ncx2` with `nc=0`.
-- Large $N$ (up to $10^8$): `scipy.stats.ncx2` is accurate here (verified at $2N\approx4\times10^7$ when reproducing §11); validate against `mpmath` at 3 points for $N\in\{10^5,10^7\}$, 1% relative down to 1e-8.
+- **Surrogate cdf/sf, all $K$ (including $K=0$):** every evaluation goes through one helper, `numerics.special.ncx2_cdf(x, nu, lam)` / `ncx2_sf`, which calls `scipy.stats.ncx2` with $\lambda\leftarrow\max(\lambda,\lambda_{\rm floor})$, $\lambda_{\rm floor}=10^{-300}$ (`NC_FLOOR`). At double precision this is the central $\chi^2_{2N}$ exactly (the $j\ge1$ Poisson weights are below 1e-300).
+  - **Why not `chi2`:** `scipy.stats.chi2`, `scipy.stats.gamma`, `special.gammainc` and `ncx2(nc=0)` share one code path that loses accuracy in the lower tail at large shape (cancellation in $a\ln y-y-\ln\Gamma(a+1)$, magnitude ~$10^9$). At $z=-5.5$ sd (cdf ≈ 1.8e-8), relative error is 3e-14 / 1.6e-6 / 2.3e-2 / 0.32 for $N=10^5/10^6/10^7/10^8$; the `ncx2` floor path gives 3e-14 / 2e-13 / 5e-13 / 1.2e-12 **[V]** (scipy 1.18.1; reference: series for $P(a,x)$ with an `mpmath` prefactor; QUESTIONS Q-3).
+  - The fix relies on a scipy implementation detail, so it is guarded by the pinned regression test `test_ncx2_floor_tail` (§10): the four points above, both tails, `rtol=1e-6`. A scipy upgrade that fails it blocks the upgrade.
+  - Closed forms (truncated exponential for $N=1$, truncated Erlang for small $N$) are test oracles only, at $N\le100$.
+- **Large $N$ (up to $10^8$):** covered by the same helper and the same regression test; NFR-2 (1% relative down to 1e-8) is the requirement, the regression gate is tighter on purpose.
 - **Samplers.**
   - `sample_sum` (default, any $N$): draw $X\sim\chi'^2(2N,2NK)$ with `Generator.noncentral_chisquare` (or `chisquare` for $K=0$), set $\eta=\sigma_N^2X$, and reject if $\eta>1$. This is exact for passive MRC because the joint truncation constrains only the sum.
   - `sample_elements` (needed only for selection combining, $N\le N_{\max}$ with default 64): draw $h_i\sim\mathcal{CN}\big(\sqrt{K\bar\eta/(N(K+1))}\,e^{i\phi_{0,i}},\ \bar\eta/(N(K+1))\big)$ for $i=1..N$, reject the whole vector if $\sum|h_i|^2>1$. Calling it with $N>N_{\max}$ raises an error that names `sample_sum`.
   - Acceptance rate is $\mathcal Z_{K,N}$, which is ≥ ~0.5 because $x_{\max}$ ≥ the surrogate mean for $\bar\eta\le1$ **[V]**. Phases $\phi_{0,i}=0$ by default (result is phase-independent).
 - Moments: numerical integration of the **truncated** pdf, $\mathbb E^{\rm QC}[\eta_s^m]$. $\bar\eta$ is a scale parameter, not the mean.
+  - **Integration window (adaptive) [D]:** in $X$-space, with surrogate mean $\mu_X=2N(1+K)$ and sd $\sigma_X=\sqrt{4N(1+2K)}$, integrate over $[x_{\rm lo},x_{\rm hi}]=[\max(0,\mu_X-w\sigma_X),\ \min(x_{\max},\mu_X+w\sigma_X)]$, starting at $w=20$.
+  - **Mass check:** the neglected mass $M_{\rm out}=F_{\chi'^2}(x_{\rm lo})+\big[S_{\chi'^2}(x_{\rm hi})-S_{\chi'^2}(x_{\max})\big]$ (second term only if $x_{\rm hi}<x_{\max}$) must satisfy $M_{\rm out}\le10^{-14}\mathcal Z_{K,N}$; otherwise double $w$ (cap $w=320$, then raise). Because $\eta\in[0,1]$, the moment error is at most $M_{\rm out}/\mathcal Z$ for every $m\ge0$.
+  - **Why adaptive:** a fixed 20 sd window is safe only when the surrogate is near-Gaussian. For $K=0$, $N=1$ (exponential) it leaves $e^{-21}\approx7.6\times10^{-10}$ out whenever $x_{\max}>\mu_X+20\sigma_X$, i.e. $\bar\eta<0.048$ (a bare-cell or long link) **[V]**.
+  - Any non-finite pdf value inside the window raises (`ncx2.pdf` returns `nan` ≳27 sd from the mean at $N=10^7$, $K=10$, and at $K=10^8$, $N=1$; QUESTIONS Q-5). `nan` is never masked to 0.
+- **Untruncated surrogate (RQ1 only, `physical=False`):** `SmallScale.surrogate_cdf(x)` $=F_{\chi'^2}(x/\sigma_N^2)$, without $\mathcal Z$ and without the clamp. For a deterministic large-scale factor it satisfies $F(x)=F_{\rm surr}(x)/\mathcal Z_{K,N}$ for $x<1$ exactly; the removed mass is $1-\mathcal Z_{K,N}$.
 - Reference: at $\bar\eta=0.999$, $N=1$: $\mathcal Z_K=0.63249$ ($K=0$), $0.54404$ ($K=10$), $0.51689$ ($K=100$) **[V]**.
 
 ### 6.2 Large-scale PDT (FR-CH-2,3)
@@ -178,10 +186,17 @@ Parameters: $K\ge0$, scale $\bar\eta$ ($=\bar\eta_s$ for $N=1$, $=\bar\eta_\Sigm
 - cdf: $P(\eta_\ell\le x)=Q(k,\,u_x/\theta)$ with $u_x=-\ln x-\Psi_0$ (`gammaincc`); equals 1 when $u_x\le0$. Survival: `gammainc`.
 - Moments: $\mathbb E[\eta_\ell^m]=e^{-m\Psi_0}(1+m\theta)^{-k}$ **[V]** ($\Psi_0=0$, $k=4,\theta=0.01$: 0.96098 analytic vs 0.96095 MC).
 - Degenerate $\sigma_G\to0$: point mass at $e^{-\Psi_0-\mu_G}$ (handle explicitly).
+- Large shape ($k>10^5$, i.e. $\sigma_G/\mu_G<3\times10^{-3}$): `gammainc`/`gammaincc` have the §6.1 lower-tail problem. Evaluate via $P(k,u)=F_{\chi^2_{2k}}(2u)$ with the `ncx2` floor helper (§13 rule 10).
 
 **Baselines.**
 - V0 log-normal: $\Psi\sim\mathcal N(\bar\Psi,\sigma_\Psi^2)$, untruncated; must expose `mass_above_one()` $=\Phi(-\bar\Psi/\sigma_\Psi)$. Reference: 0.158655 for $\sigma_\Psi=\bar\Psi$ **[V]**. Flag as `physical=False`.
 - Conditioned log-normal: same, conditioned on $\Psi\ge0$; normalizer $\Phi(\bar\Psi/\sigma_\Psi)$.
+
+**Law comparison (RQ2, E2).**
+- **Matching rule [A]:** all three laws share the first two moments of $\Psi$: $\bar\Psi=\Psi_0+\mu_G$, $\sigma_\Psi=\sigma_G$, with the same $\Psi_0$. (The conditioned log-normal matches only before conditioning; its post-conditioning moments are reported.)
+- **Realizations with $\eta>1$ under the V0 log-normal:** service formulas are undefined there ($N_{\rm out}=(1-\eta)\bar n_{\rm th}<0$). Policy `eta_gt1: clip` (the only one implemented): evaluate the service at $\min(\eta,1)$, set `physical=False`, and report the affected mass next to every number. Together with `friis_clipped` (§6.5), this is one of the two sanctioned exceptions to §13 rule 9, and both exist only inside flagged baselines.
+- **Outputs:** $\Delta P_{\rm out}$ (absolute) and $\Delta\bar C/\bar C$ (relative, for $C_\chi$, $C_{\rm het}$ and the default RAR $C_{\rm rx}$) of each baseline against log-gamma, vs $\sigma_\Psi/\bar\Psi$.
+- **Limit check:** as $\sigma_\Psi\to0$ all three laws give the same $P_{\rm out}$ and $\bar C$ to `rtol=1e-6`.
 
 ### 6.3 Obstacle generator (FR-CH-4, optional) [A]
 Number of obstacles $M\sim\mathrm{Poisson}(\lambda_od)$; each log-loss $\psi_j\sim\mathrm{Gamma}(k_o,\theta_o)$, i.i.d.; $G=\sum_j\psi_j$.
@@ -202,9 +217,11 @@ $\eta=\eta_\ell\eta_s$, independent. Work in $\Psi$-space, $\eta_\ell=e^{-\Psi}$
 ### 6.5 Link budget (FR-CH-6)
 - Apertures:
   - $A_t=G_t\lambda^2/(4\pi)$.
-  - $A_r$ is given, or $A_r=A_e=3\lambda^2/(8\pi)$ for a bare RAR cell (§7.4).
-  - Either is multiplied by an optional enhancement factor $G_{\rm enh}\ge1$ for field-confining structures.
-- Fresnel product $\tau^2=D_f=A_tA_r/(\lambda d)^2$ (equals the Friis power ratio).
+  - $A_r$ is the receive collecting aperture: given in config for an **antenna-fed receiver** (horn, lens or dish feeding the RAR or the LNA; the default), or $A_r=A_e=3\lambda^2/(8\pi)$ for a bare RAR cell (§7.4).
+  - **Enhancement factor (receive side only):** $A_{r,\rm eff}=G_{\rm enh}A_r$, with `G_enh: float = 1.0` and $G_{\rm enh}\ge1$ (raise otherwise). It represents a lossless, matched field-confining cell structure on top of $A_r$. There is no transmit-side factor; transmit gain is $G_t$ only (QUESTIONS Q-4).
+  - In the antenna-fed case leave $G_{\rm enh}=1$, otherwise the collecting area is counted twice. Loss in a feed or enhancing structure is an attenuator, not $G_{\rm enh}<1$ (§7.4).
+  - Antenna-fed coupling into the receiver is assumed lossless and matched **[A]**: an ideal-receiver bound, stated as such in the paper.
+- Fresnel product $\tau^2=D_f=A_tA_{r,\rm eff}/(\lambda d)^2$ (equals the Friis power ratio).
 - Geometric coupling models (config `coupling_model`):
   - `"goubau"` (**default**): $\eta_{\rm geo}=1-e^{-\tau^2}$ **[L]** (Goubau & Schwering 1961; optimally tapered apertures). It reduces to Friis for $\tau^2\ll1$, with relative difference $\le\tau^2/2$. It is an approximation, so results with $\bar\eta\to1$ are model-dependent; E3 reports the sensitivity to this choice.
   - `"friis_clipped"` (baseline, `physical=False`): $\min(\tau^2,1)$. Allowed only as a labeled comparison, analogous to the V0 log-normal.
@@ -252,7 +269,7 @@ $$N_{\rm amp}=\frac{S_E^2A_e}{\eta_0hf}.$$
 - **Field convention:** the constructor takes a required `field_convention: "rms" | "peak"` argument (no default); a peak value is divided by $\sqrt2$ before use.
 - **Sub-quantum-limit input:** if the mapped $N_{\rm amp}<\frac12$, raise `ValueError`. Do not clamp silently.
 - **BBR-inclusive input:** if the supplied $S_E$ was measured including in-band BBR, subtract in power first: $S_{E,\rm int}^2=S_{E,\rm meas}^2-S_{E,\rm BBR}^2$ (config flag `includes_bbr`). Error if negative.
-- **Enhancement structures:** $G_{\rm enh}$ does **not** change $N_{\rm amp}$; it enters only through $A_r$ in §6.5. A lossy enhancing structure is modeled as an extra attenuator $(\eta_{\rm struct},\bar n_{\rm th})$ composed before the receiver.
+- **Enhancement structures and antenna feeds:** neither $G_{\rm enh}$ nor $A_r$ changes $N_{\rm amp}$; they enter only through $A_{r,\rm eff}$ in §6.5. $N_{\rm amp}$ always uses the bare-cell $A_e$ and the $S_E$ at the atoms **[D]**: a lossless matched structure raises the field at the atoms by $\sqrt{G}$, so the incident-referred sensitivity is $S_E/\sqrt G$ while the collecting area is $GA_e$, and $(S_E^2/G)(GA_e)=S_E^2A_e$. Evaluating $N_{\rm amp}$ with $A_r$ or $A_{r,\rm eff}$ in place of $A_e$ overcounts the noise by $A_{r,\rm eff}/A_e$; the code must not accept an aperture argument in the $N_{\rm amp}$ mapping. A lossy feed or enhancing structure is an extra attenuator $(\eta_{\rm struct},\bar n_{\rm th})$ composed before the receiver.
 - Sideband default `dsb` (§7.1).
 - Equivalent noise temperature (RJ): $T_n=N_{\rm amp}hf/k_B$.
 - References **[V]**:
@@ -292,6 +309,7 @@ Metrics over the compound PDT $f(\eta)$:
 - $P_{\rm out}=F(\eta^\*_{\rm rx})$ (§6.4).
 - $\mathbb E[E_N]=\int_{\eta^\*_{\rm rx}}^1E_N(\eta)f(\eta)\,d\eta$, computed as a nested integral in $\Psi$-space, cross-checked by MC (§10.1).
 - $\mathbb E[\tilde\nu_-]$, $\mathbb E[F_{\rm opt}]$, $\mathbb E[F_{\rm BK}]$ likewise.
+- **Truncation effect (RQ1, E1):** $\Delta P_{\rm out}=P_{\rm out}-P_{\rm out}^{\rm surr}$, where $P_{\rm out}^{\rm surr}$ uses `surrogate_cdf` (§6.1) in place of the truncated small-scale cdf in the §6.4 nested integral. Report $\Delta P_{\rm out}$ and $P_{\rm out}/P_{\rm out}^{\rm surr}$ next to the removed mass $1-\mathcal Z_{K,N}$. Identity check: with a deterministic large-scale factor and $\eta^\*/\eta_\ell<1$, $P_{\rm out}/P_{\rm out}^{\rm surr}=1/\mathcal Z_{K,N}$ to `rtol=1e-12`.
 
 **Limiting cases (regression tests).** The small-scale cdf is always evaluated with the clamp $F_s(\min\{x,1\})$, and the tests include $\eta_\ell<\eta^\*$, where the clamp is active.
 
@@ -326,6 +344,18 @@ $$S_E^{\rm req}=\sqrt{N_{\rm amp}^{\rm req}\,\eta_0hf/A_e}\quad(\text{rms}).$$
 - Capacity-based variant: smallest $N_{\rm amp}$ with $\bar C_{\rm rx}\ge(1-\delta)\bar C_{\rm het}$, solved by `brentq` on $\log N_{\rm amp}$.
 - In the RJ regime $S_{E,\rm BBR}\propto f$; E6 must show this slope as a sanity check, and must plot SSB and DSB required-$S_E$ curves separately.
 
+### 8.4 RAR vs LNA throughput map (FR-SVC-C5, RQ5) [D]
+Question: where in $(f,d,K)$ does an RAR deliver more bit/s than an electronic LNA, if anywhere?
+- **Fair comparison (binding):** both receivers sit behind the **same** collecting aperture $A_r$ (antenna-fed, §6.5, $G_{\rm enh}=1$), so they see the same $\eta$ per realization. They differ only in $N_{\rm amp}$, $N_{\rm img}$ (RAR `dsb`, LNA `ssb` by default) and bandwidth $B$.
+- **Equal transmit power, not equal $N_s$:** $N_s=P_t/(hfB)$ per receiver, so a wider band trades photons per mode for modes per second.
+- Ergodic throughput $\bar R_b=B\cdot\mathbb E_\eta\big[C_{\rm rx}(\eta;N_s,N_{\rm amp},N_{\rm img})\big]$ (§8.2). Optional outage variant: $R_{b,\epsilon}=B\cdot C_{\rm rx}(F^{-1}(\epsilon))$.
+- **Output:** $\rho(f,d;K)=10\log_{10}\big(\bar R_b^{\rm RAR}/\bar R_b^{\rm LNA}\big)$ on an $(f,d)$ grid, one panel per $K$, with the $\rho=0$ contour drawn and labeled.
+- **Per-band receiver inputs [A]** (IDEA Q2): RAR $(S_E,B_{\rm RAR})$ from `literature_rar.yaml` or `from_physics`; LNA $(T_n,B_{\rm LNA},\texttt{tn\_convention})$ from config with `source:`. Between configured bands, interpolate $\log S_E$, $\log T_n$, $\log B$ linearly in $\log f$; outside the configured range, mask (no extrapolation).
+- **Asymptotes (tests):** write $D(\eta)=(1-\eta)\bar n_{\rm th}+\tfrac12+N_{\rm amp}+N_{\rm img}$.
+  - Power-limited ($\eta N_s\ll D$): $R_b\to\eta P_t/(hf\,D\ln2)$, independent of $B$, so for deterministic $\eta$, $\rho\to10\log_{10}(D_{\rm LNA}/D_{\rm RAR})$.
+  - Bandwidth-limited ($\eta N_s\gg D$): $R_b\approx B\log_2(\eta N_s/D)$, so bandwidth dominates.
+  - Hence an RAR can win only through bandwidth at high SNR, or through lower noise at low SNR. The figure caption states which regime each region is in.
+
 ## 9. Diversity (FR-DIV) — ported from V0, keep exact forms
 
 With $\sigma_N^2=\bar\eta_\Sigma/(2N(K+1))$:
@@ -351,7 +381,10 @@ $$P(\eta_{\rm SC}>x)=\dfrac{N}{\mathcal Z_{K,N}}\displaystyle\int_x^1f_{s}(t)\,G
 | Limits | small-scale $K=0$ and $K\to\infty$; large-scale $\sigma_G\to0$; compound reduces to each factor; §8.1 limiting-case table (both large-scale laws); Goubau → Friis for $\tau^2\to0$ |
 | Cross-method | analytic/quadrature vs MC per §10.1; quadrature vs `mpmath` at 3 points per function |
 | Property (`hypothesis`) | pdfs ≥ 0 and integrate to 1; cdfs monotone in $[0,1]$; capacities monotone in $\eta$ and $N_s$; $C_\chi\ge C_{\rm het},C_{\rm hom}$; $F_{\rm opt}\ge F_{\rm BK}$; $\bar\eta_\Sigma\le1$ without clipping for `goubau` |
-| Regression | §11 reference values; figure CSVs hashed after Abdurrahman approves them |
+| Regression | §11 reference values; figure CSVs hashed after Abdurrahman approves them; `test_ncx2_floor_tail` (§6.1, pinned scipy guard); §11 $N_{\rm req}$ table through the `ncx2` floor helper |
+| Receiver aperture | $N_{\rm amp}$ identical for $G_{\rm enh}\in\{1,10,100\}$ and for any $A_r$ (§7.4); $\tau^2\propto G_{\rm enh}$ under `friis_clipped` below 1; `goubau` $\eta_{\rm geo}<1$ and increasing in $G_{\rm enh}$; $G_{\rm enh}<1$ raises |
+| Moments window | $K=0$, $N=1$, $\bar\eta=0.01$: truncated-exponential moments $m\in\{1,2\}$ match the closed form to `rtol=1e-10` (window must widen past 20 sd); a forced `nan` in the window raises |
+| Throughput map | §8.4 power-limited asymptote to `rtol=1e-3` at $\eta N_s/D<10^{-4}$ (deterministic $\eta$); equal $B$ and $D_{\rm RAR}\ge D_{\rm LNA}$ ⇒ $\rho\le0$ everywhere |
 | Receiver physics | T-LIN-1..11 (§14.11): weak-probe vs full Lindblad, analytic limits, optional QuTiP cross-check |
 
 Tolerances live in `tests/tolerances.py`. Changing a tolerance requires an entry in `QUESTIONS.md`.
@@ -391,7 +424,16 @@ Other verified values:
 | $T_n$ conventions | values in §7.3 |
 | Crossover values | values in §8.3 |
 
-**$N_{\rm req}$ (verified, exact integers; consistent with V0 Table at its displayed precision)** for $F_N(\eta^\*)\le10^{-3}$ under passive MRC, $\eta_\ell=1$, $\bar\eta_\Sigma=\eta^\*+0.9(1-\eta^\*)$. Tolerance ±0.1%:
+**Surrogate tails at $z=\mp5.5$ sd** (central $\chi^2_{2N}$, cdf at $2N-5.5\sqrt{4N}$ and sf at $2N+5.5\sqrt{4N}$; reference values for `test_ncx2_floor_tail`) **[V]**. Lower-tail reference: series for $P(a,x)$; upper-tail reference: Legendre continued fraction for $Q(a,x)$; both with an `mpmath` prefactor, and both match `mpmath.gammainc` at $N=10^5$. Only the lower tail is affected; `chi2.sf` is accurate (< 1e-14) at all four $N$.
+
+| $N$ | cdf (lower) | `chi2` rel. error | `ncx2` floor rel. error | sf (upper) | `ncx2` floor rel. error |
+|---|---|---|---|---|---|
+| $10^5$ | 1.590617e-8 | 3e-14 | 3e-14 | 2.256714e-8 | 3e-15 |
+| $10^6$ | 1.796389e-8 | 1.6e-6 | 2e-13 | 2.006462e-8 | 2e-14 |
+| $10^7$ | 1.865997e-8 | 2.3e-2 | 5e-13 | 1.932410e-8 | 8e-14 |
+| $10^8$ | 1.888480e-8 | 3.2e-1 | 1.2e-12 | 1.909481e-8 | 2.3e-13 |
+
+**$N_{\rm req}$ (verified, exact integers; consistent with V0 Table at its displayed precision)** for $F_N(\eta^\*)\le10^{-3}$ under passive MRC, $\eta_\ell=1$, $\bar\eta_\Sigma=\eta^\*+0.9(1-\eta^\*)$. Re-verified in v0.4.1 through the `ncx2` floor helper: every integer unchanged, since the operating point ($10^{-3}$, about 3 sd) is far from where `chi2` degrades **[V]**. Tolerance ±0.1%:
 
 | $f$ (GHz) | $K=0$ | $K=10$ | $K=100$ |
 |---|---|---|---|
@@ -419,8 +461,8 @@ large_scale:
 link_budget:
   coupling_model: goubau     # goubau | friis_clipped (baseline, physical=False)
   A_t_m2: 2.0                # [A] near-field apertures; a 30 dBi horn to a bare dipole gives outage = 1 everywhere
-  A_r_m2: 2.0                # [A]
-  G_enh: 1.0
+  A_r_m2: 2.0                # [A] antenna-fed receiver (about 38 dBi dish at 5 GHz feeding the RAR/LNA), not a bare cell
+  G_enh: 1.0                 # receive side only; keep 1 when A_r is an antenna aperture (§6.5)
   sensitivity_models: [goubau, friis_clipped]   # E3 reports both
 source_state: {type: tmsv, r: 1.0}
 front_end: {type: identity}
@@ -428,6 +470,18 @@ mc: {samples: 1000000, alpha_familywise: 1.0e-3}
 outputs: {figure: true, csv: true, latex_table: false}
 ```
 Receivers in E5/E6/E8 declare `sideband` and, for the RAR, `field_convention`; electronic receivers declare `tn_convention`.
+
+E2 adds `law_comparison: {match: psi_moments, eta_gt1: clip, sigma_ratio: [...]}` (§6.2). E5 adds the throughput-map block (§8.4):
+```yaml
+throughput_map:
+  P_t_w: null                # [A] equal TX power for both receivers
+  f_ghz: {start: 5, stop: 300, num: 40, scale: log}
+  distance_m: {start: 10, stop: 1000, num: 40, scale: log}
+  K: [0, 10, 100]
+  rar: {source: literature_rar, sideband: dsb}       # per-band S_E, B_RAR [A], IDEA Q2
+  lna: {bands: [], tn_convention: rj, sideband: ssb} # per-band {f_hz, T_n_k, B_hz, source} [A]
+  interpolate: loglog        # no extrapolation; out-of-range cells are masked
+```
 
 `configs/literature_rar.yaml` entries (FR-EXP-7):
 ```yaml
@@ -474,7 +528,8 @@ Outputs: `results/<experiment>/<config_hash>/{fig.pdf, fig.png, data.csv, meta.j
 6. Quadrature failures raise or warn; never return an unchecked result.
 7. MC: vectorized, chunked (≤10⁶ per chunk), explicit `Generator`, report standard error with every MC estimate; compare per §10.1.
 8. Stable algebra: `expm1`/`log1p` for thermal quantities; the §5.2 stable $\tilde\nu_-$ form only.
-9. No silent clamping of physical quantities (transmissivities, $N_{\rm amp}$); out-of-domain inputs raise.
+9. No silent clamping of physical quantities (transmissivities, $N_{\rm amp}$); out-of-domain inputs raise. Sanctioned exceptions exist only inside flagged baselines (`friis_clipped`, §6.5; V0 log-normal `eta_gt1: clip`, §6.2).
+10. Regularized incomplete gamma / $\chi^2$ cdfs with shape $>10^5$ (dof $>2\times10^5$) go through the `ncx2` floor helper (§6.1), never through `chi2`, `gamma`, `gammainc` or `gammaincc` directly. Never mask a non-finite pdf value to 0; raise.
 
 ## 14. Rydberg receiver physics model (pure Python)
 
@@ -619,6 +674,15 @@ Implications for E9 with $N_v\approx3\times10^4$:
 E9 therefore fits NFR-3 (< 5 min per figure). These per-class costs are recorded benchmarks, not CI gates (FSD FR-LIN-2/3). No compiled code (Numba, Cython, C++) is needed; adding any requires a `QUESTIONS.md` entry with a profile showing the hotspot.
 
 ## 15. Changelog
+
+**0.4.1 (2026-11-10)**, paired with FSD v0.6.1. Resolves QUESTIONS Q-3, Q-4, Q-5 and adds the RQ1/RQ2/RQ5 outputs.
+- **Numerics:**
+  - §6.1 (Q-3): every surrogate cdf/sf, including $K=0$, goes through the `ncx2` floor helper ($\lambda\ge10^{-300}$); `chi2`/`gamma`/`gammainc` lose up to 32% relative accuracy at $N=10^8$ in the lower tail **[V]**. Pinned regression `test_ncx2_floor_tail` added; the `gamma(N, scale=2σ²)` alternative removed. §6.2 and §13 rule 10 extend this to large-shape log-gamma.
+  - §6.1 (Q-5): moment integration uses an adaptive window with a neglected-mass check ($\le10^{-14}\mathcal Z$); the fixed 20 sd window fails for $K=0$, $N=1$, $\bar\eta<0.048$. Non-finite pdf values raise.
+  - §11: $N_{\rm req}$ re-verified through the new helper (unchanged); tail reference table added.
+- **Link budget (Q-4):** §6.5 single receive-side `G_enh` (default 1, $\ge1$); no transmit factor. $A_r$ defaults to an antenna-fed receiver aperture, coupling assumed lossless **[A]**. §7.4 states the $N_{\rm amp}$ invariance with its derivation and forbids an aperture argument in the mapping.
+- **New outputs:** §8.1 truncation effect on outage (RQ1) with `surrogate_cdf`; §6.2 law comparison with moment matching and the `eta_gt1: clip` baseline policy (RQ2); §8.4 RAR-vs-LNA throughput map at equal TX power and shared aperture (RQ5).
+- **Validation/config:** §10 rows for the regression guard, aperture invariance, moments window and throughput asymptotes; §12 config comments and E2/E5 blocks; §13 rule 9 lists the sanctioned baseline exceptions.
 
 **0.4 (2026-11-03)**, paired with FSD v0.6.
 - **Physics:**

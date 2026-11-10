@@ -35,7 +35,7 @@
 - Recommendation: B (implemented). `K == 0` closed forms (truncated exponential, Erlang) are tested at small N.
   The TSD §6.1 K = 0 wording should be amended to say so. Also note `ncx2.pdf` returns nan ~27 sd below the
   mean for N = 1e7, K = 10 (true value < 1e-100); moments integrate from mean - 20 sd instead of masking it.
-- Status: open (implemented per B)
+- Status: closed (resolved by TSD v0.4.1 / FSD v0.6.1; implemented in M2 revision)
 
 ## Q-4 [non-blocking] Scope of the enhancement factor G_enh in the link budget
 - Context: `channel/link_budget.py::link_budget`, FR-CH-6, TSD §6.5 ("Either is multiplied by an optional
@@ -44,11 +44,11 @@
   TSD §7.4 says G_enh enters "only through A_r".
 - Options: A) one factor on A_r only; B) separate `g_enh_tx`, `g_enh_rx`.
 - Recommendation: B (implemented, both default to 1), so A is `g_enh_tx=1`. Confirm intended use.
-- Status: open
+- Status: closed (TSD v0.4.1: single receive-side `G_enh`; `g_enh_tx` removed)
 
 ## Q-5 [non-blocking] `ncx2.pdf` returns nan far from the mean (scipy 1.18.1)
 - Context: `SmallScale.moment` (TSD §6.1), N = 1e7, K = 10 (and K = 1e8, N = 1).
 - Observation: `stats.ncx2(...).pdf` returns nan in bands ~27 sd from the mean where the true density is < 1e-100.
 - Options: A) mask nan as 0; B) integrate only over mean +/- 20 sd and raise on any non-finite value.
 - Recommendation: B (implemented); neglected mass < 1e-80.
-- Status: open (implemented per B)
+- Status: closed (resolved by TSD v0.4.1 / FSD v0.6.1; implemented in M2 revision)
