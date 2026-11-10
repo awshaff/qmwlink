@@ -1,10 +1,23 @@
 experiment: e4_receiver_window
 environment: {T_env_k: 300.0}
 bands_ghz: [5, 30, 100, 300]
-n_add: {start: 0.0, stop: 1.2, num: 121, scale: lin}
-# Front-end classes: attenuator (eta_t, n_t) then additive noise N_add (swept).
-# eta_t = 1 is the pure additive-noise front end. The transducer rows are [A] placeholders.
-classes:
-  - {label: "additive noise", eta_t: 1.0, n_t: 0.0, source: "analytic reference (TSD §8.1)"}
-  - {label: "transducer, eta_t=0.8", eta_t: 0.8, n_t: 0.01, source: "[A] placeholder (TSD §8.1 example family)"}
-  - {label: "transducer, eta_t=0.6", eta_t: 0.6, n_t: 0.01, source: "[A] placeholder (TSD §8.1 example)"}
+n_add: {start: 0.0, stop: 1.2, num: 121, scale: lin}   # input-referred N_add sweep
+# Published transducers (TSD §16.5). PIChannel with n_t = 0 and N_t = eta_t * N_add_in, so the
+# input-referred noise reproduces the paper's figure; only N_add_in sets the window.
+front_end_classes:
+  - {label: "Ideal", eta_t: 1.0, n_t: 0.0, N_t: 0.0, N_add_in: 0.0, source: "reference (no front-end noise)"}
+  - {label: "Electro-optic, low noise", eta_t: 0.087, n_t: 0.0, N_t: 0.01392, N_add_in: 0.16,
+     source: "Sahu et al., Nat. Commun. (2022), quantum-enabled microwave-optical interface (pulsed)"}
+  - {label: "Electro-optic, high eff.", eta_t: 0.15, n_t: 0.0, N_t: 0.0615, N_add_in: 0.41,
+     source: "Sahu et al., Nat. Commun. (2022) (pulsed)"}
+  - {label: "Rydberg mm-wave to optical", eta_t: 0.58, n_t: 0.0, N_t: 0.348, N_add_in: 0.60,
+     source: "Kumar et al., Nature 615, 614 (2023); 99.4 GHz, 5 K, internal efficiency, 360 kHz bandwidth"}
+  - {label: "Piezo-optomech., low noise", eta_t: 0.0047, n_t: 0.0, N_t: 0.002726, N_add_in: 0.58,
+     source: "Zhao et al., Nat. Nanotechnol. (2025), doi:10.1038/s41565-025-01874-8; arXiv:2406.02704 (5.07 GHz, CW)"}
+  - {label: "Piezo-optomech., high eff.", eta_t: 0.022, n_t: 0.0, N_t: 0.02068, N_add_in: 0.94,
+     source: "Zhao et al., Nat. Nanotechnol. (2025); arXiv:2406.02704"}
+  - {label: "Quantum-limited PI amplifier (bound)", eta_t: 1.0, n_t: 0.0, N_t: 0.5, N_add_in: 0.5,
+     source: "Caves, PRD 26, 1817 (1982), theoretical limit, not a device"}
+references_outside_axis:
+  - {label: "Cryogenic HEMT 1.5 K at 5 GHz", n_add_in: 6.25,
+     source: "Low Noise Factory LNF-LNC4_8F_LG datasheet (4-8 GHz, 1.5 K); N_add = kT/hf"}

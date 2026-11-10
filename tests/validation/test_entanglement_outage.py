@@ -157,12 +157,15 @@ def test_mc_agrees_with_quadrature(k: float) -> None:
     ent = eta > es
     safe = np.where(ent, eta, 1.0)
     metrics = svc.metrics()
+    # unconditional E[E_N]
+    res = check_moment(np.where(ent, np.maximum(0.0, -np.log2(svc.nu_minus(safe))), 0.0),
+                       metrics.log_neg)  # fmt: skip
+    assert res.ok, res
+    # conditional averages: mean over entangled samples only (FR-SVC-E2 (f))
     for expected, g in (
-        (metrics.e_log_neg, lambda e: np.maximum(0.0, -np.log2(svc.nu_minus(e)))),
-        (metrics.e_nu_minus, svc.nu_minus),
-        (metrics.e_fidelity_opt, lambda e: 1.0 / (1.0 + svc.nu_minus(e))),
-        (metrics.e_fidelity_bk, svc.fidelity_bk_at),
+        (metrics.nu_minus_cond, svc.nu_minus),
+        (metrics.fidelity_opt_cond, lambda e: 1.0 / (1.0 + svc.nu_minus(e))),
+        (metrics.fidelity_bk_cond, svc.fidelity_bk_at),
     ):
-        vals = np.where(ent, g(safe), 0.0)
-        res = check_moment(vals, expected)
+        res = check_moment(g(eta[ent]), expected)
         assert res.ok, (expected, res)

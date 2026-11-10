@@ -55,6 +55,8 @@ testpaths = ["tests"]
 addopts = "-q --strict-markers"
 markers = ["slow: mpmath / heavy Monte Carlo checks (still part of the default run)"]
 pythonpath = ["tests"]
+# Q-9: a scipy RuntimeWarning (e.g. ncx2.sf past K = 1e9) must fail a test, never pass silently.
+filterwarnings = ["error::RuntimeWarning"]
 
 [tool.coverage.run]
 source = ["src/qmwlink"]

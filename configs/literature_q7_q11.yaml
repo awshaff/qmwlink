@@ -1,0 +1,81 @@
+# Sourced replacements for the [A] placeholders in QUESTIONS Q-7 (E3/E4) and Q-11 (E5/E6/E8).
+# Compiled 2026-11-10. Paste each block into the named config; full derivations and caveats in SOURCES.md.
+# Anything still marked [A] has no published value; it is a design choice or an unverified assumption.
+
+# ---------------------------------------------------------------- E3 (configs/e3.yaml) — Q-7
+large_scale:
+  model: loggamma
+  psi0_from_absorption: true
+  # Deterministic part Psi0 = gamma_abs * d: dry-air (O2) specific attenuation, ITU-R P.676-12 Annex 1
+  # line-by-line, p = 1013.25 hPa, T = 300 K (matches T_env), rho = 7.5 g/m^3. Units: 1/m (power, nepers).
+  gamma_abs_per_m: {5: 1.524e-6, 30: 4.394e-6, 100: 6.641e-6, 300: 5.088e-6}
+  gamma_abs_source: "ITU-R P.676-12 Annex 1 (via itur 0.4.0), O2 only, 1013.25 hPa, 300 K"
+  # Cross-check: Gonzalez-Raya et al. PRApplied 18, 044002 (2022) use 1.44e-6 /m at 5 GHz (O2) -> within 6%.
+  #
+  # Stochastic part G (water vapour + rain), climate of Kyung Hee Univ. Seoul campus (37.597 N, 127.052 E).
+  # Per metre, with the path fully correlated (fine for d <= 1 km): mean and std both scale linearly in d,
+  # so the log-gamma shape k = mean^2/std^2 is distance-independent.
+  # Schema: `stochastic_per_m` is the default from TSD v0.4.3 §6.2 (the per-link form is for tests/sweeps only).
+  stochastic_per_m:
+    5:   {mean: 4.160e-7, std: 9.028e-7}   # k = 0.21
+    30:  {mean: 2.839e-5, std: 6.760e-5}   # k = 0.18
+    100: {mean: 1.509e-4, std: 2.049e-4}   # k = 0.54
+    300: {mean: 1.523e-3, std: 1.101e-3}   # k = 1.91
+  stochastic_source: >-
+    Water vapour: ITU-R P.836 surface water-vapour density distribution at KHU Seoul, mapped through
+    P.676-12 Annex 1 (300 K). Rain: ITU-R P.837-7 rain-rate distribution (P0 = 6.1 %, R0.01 = 60.6 mm/h)
+    through P.838-3 specific attenuation (horizontal path, circular polarisation). Moments integrated over
+    the annual distribution (vapour quantiles 0.1-99 %, rain exceedance 0.001 %-P0). Computed with itur 0.4.0.
+link_budget:
+  coupling_model: goubau
+  A_t_m2: 2.0      # [A] design choice, not a literature value: 2 m^2 effective = ~2.0 m dish at e_a = 0.65
+  A_r_m2: 2.0      # [A] antenna-fed receiver. With 2 m^2 the geometric reach where eta_geo >= eta* is
+                   #     12.5 m (5 GHz), 87 m (30 GHz), 328 m (100 GHz), 1144 m (300 GHz), before absorption.
+  G_enh: 1.0
+
+# ---------------------------------------------------------------- E4 (configs/e4.yaml) — Q-7
+# Front-end classes from published transducers. The model is PIChannel (TSD §7.5) with n_t = 0 and
+# N_t = eta_t * N_add_in, so the input-referred noise N_r = N_add_in reproduces the paper's figure exactly.
+# Only N_add_in sets the threshold eta*_rx; eta_t affects rate, not the window.
+front_end_classes:
+  - {label: "Electro-optic, low noise",  eta_t: 0.087,  n_t: 0.0, N_t: 0.01392, N_add_in: 0.16,
+     source: "Sahu et al., Nat. Commun. (2022), 'Quantum-enabled operation of a microwave-optical interface' (pulsed)"}
+  - {label: "Electro-optic, high eff.",  eta_t: 0.15,   n_t: 0.0, N_t: 0.0615,  N_add_in: 0.41,
+     source: "Sahu et al., Nat. Commun. (2022) (pulsed)"}
+  - {label: "Rydberg mm-wave to optical", eta_t: 0.58,  n_t: 0.0, N_t: 0.348,   N_add_in: 0.60,
+     source: "Kumar et al., Nature 615, 614 (2023); 99.4 GHz, 5 K, internal efficiency, 360 kHz bandwidth"}
+  - {label: "Piezo-optomech., low noise", eta_t: 0.0047, n_t: 0.0, N_t: 0.002726, N_add_in: 0.58,
+     source: "Zhao et al., Nat. Nanotechnol. (2025), doi:10.1038/s41565-025-01874-8; arXiv:2406.02704 (5.07 GHz, CW)"}
+  - {label: "Piezo-optomech., high eff.", eta_t: 0.022,  n_t: 0.0, N_t: 0.02068, N_add_in: 0.94,
+     source: "Zhao et al., Nat. Nanotechnol. (2025); arXiv:2406.02704"}
+  - {label: "Quantum-limited PI amplifier (bound)", eta_t: 1.0, n_t: 0.0, N_t: 0.5, N_add_in: 0.5,
+     source: "Caves, PRD 26, 1817 (1982) — theoretical limit, not a device"}
+  # Reference outside the E4 axis [0, 1.2]: a 1.5 K cryogenic HEMT at 5 GHz has N_add = kT/hf = 6.25
+  # and breaks entanglement. Source: Low Noise Factory LNF-LNC4_8F_LG datasheet (4-8 GHz, 1.5 K).
+
+# ---------------------------------------------------------------- E5/E8 (configs/e5.yaml, e8.yaml) — Q-11
+throughput_map:
+  P_t_w: 0.2       # [A] 23 dBm, typical of a 3GPP power-class-3 UE (TS 38.101-1); design choice, same for both receivers
+  rar: {source: literature_rar, require_b_hz: true, sideband: from_entry}
+  # With require_b_hz only Borowka 13.9 GHz, Yang 16.0 GHz and Legaie 96.0 GHz qualify, so the RAR range is
+  # 13.9-96 GHz and everything else is masked. To extend it you must accept an [A] bandwidth for the null entries.
+  lna:
+    tn_convention: rj
+    sideband: ssb
+    bands:   # room-temperature LNAs, typical datasheet values at 296 K ambient
+      - {f_hz: 5.0e9,   T_n_k: 57,  source: "Low Noise Factory LNF-LNR1_15B_SV, 1-15 GHz, 57 K (NF 0.78 dB)"}
+      - {f_hz: 15.0e9,  T_n_k: 57,  source: "LNF-LNR1_15B_SV band edge (typical over band)"}
+      - {f_hz: 22.0e9,  T_n_k: 129, source: "LNF-LNR16_28WA_SV, 16-28 GHz, 129 K (NF 1.6 dB)"}
+      - {f_hz: 30.0e9,  T_n_k: 200, source: "LNF-LNR26_62A_SV, 26-62 GHz, 200 K (NF 2.3 dB), datasheet 2022-10-10"}
+      - {f_hz: 60.0e9,  T_n_k: 200, source: "LNF-LNR26_62A_SV"}
+      - {f_hz: 96.0e9,  T_n_k: 280, source: "LNF-LNR55_96WA_SV, 55-96 GHz, 280 K (NF 2.86 dB)"}
+      - {f_hz: 243.0e9, T_n_k: 627, source: "Tessmann et al., Int. J. Microw. Wirel. Technol. 6, 215 (2014): NF 5.0 dB at 243 GHz (35 nm mHEMT)"}
+      # No sourced standalone LNA at 300 GHz, so cells above 243 GHz are masked. Full-receiver reference:
+      # Soylu et al., IEEE RFIC 2023, 280 GHz InP HBT receiver, 10.8-11.6 dB DSB NF over 261-300 GHz.
+    B_hz:    # system channel bandwidth for the LNA link (what a deployed radio would use)
+      - {f_hz: 5.0e9,   B: 160.0e6, source: "IEEE 802.11ax 160 MHz channel"}
+      - {f_hz: 30.0e9,  B: 400.0e6, source: "3GPP TS 38.101-2, FR2 maximum channel bandwidth"}
+      - {f_hz: 100.0e9, B: 2.16e9,  source: "[A] no W-band standard sourced; set equal to the 300 GHz minimum"}
+      - {f_hz: 300.0e9, B: 2.16e9,  source: "IEEE 802.15.3d (252.72-321.84 GHz), smallest of 2.16-69.12 GHz channels"}
+  # RECOMMENDED: also run an equal-bandwidth case (B_LNA := B_RAR per cell) to separate the noise gap from the bandwidth gap.
+  equal_bandwidth_case: true

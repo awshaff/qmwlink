@@ -65,6 +65,7 @@ def rj_slope(rows: list[E6Row], f_max_ghz: float) -> float:
 
 def _figure(rows: list[E6Row], cfg: E6Config, lit: list[LiteratureEntry]) -> Figure:
     apply_style()
+    t_env = cfg.environment.T_env_k
     fig, ax = plt.subplots(figsize=(COLUMN_WIDTH_IN, 2.9))
     fs = sorted({r.f_ghz for r in rows})
     bbr = [next(r.s_e_bbr for r in rows if r.f_ghz == f) for f in fs]
@@ -85,7 +86,13 @@ def _figure(rows: list[E6Row], cfg: E6Config, lit: list[LiteratureEntry]) -> Fig
             ax.loglog([r.f_ghz for r in sel], ys, ls=ls, color=OKABE_ITO[i + 1],
                       label=f"{sb.upper()}, {d:g} dB")  # fmt: skip
     for e in lit:
-        ax.plot(e.f_ghz, e.s_e_rms(), "^" if e.sideband == "dsb" else "o", color="k", ms=4)
+        ax.plot(
+            e.f_hz / 1e9,
+            e.s_e_intrinsic_rms(t_env),
+            "^" if e.sideband == "dsb" else "o",
+            color="k",
+            ms=4,
+        )
     ax.set_xlabel("frequency (GHz)")
     ax.set_ylabel(r"$S_E$ (V m$^{-1}$ Hz$^{-1/2}$, rms)")
     ax.legend(frameon=False, ncol=2, loc="lower right")

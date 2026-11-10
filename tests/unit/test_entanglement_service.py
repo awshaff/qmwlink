@@ -58,7 +58,7 @@ def test_e1_no_window_for_n_add_at_least_one(n_add: float) -> None:
     svc = EntanglementService(
         CompoundPDT(SmallScale(10.0, 0.99), DeterministicLoss(0.0)), NTH, fe, 1.0
     )
-    assert svc.p_out() == 1.0 and svc.metrics().e_log_neg == 0.0
+    assert svc.p_out() == 1.0 and svc.metrics().log_neg == 0.0
     assert svc.truncation_effect().ratio == 1.0
 
 
@@ -155,8 +155,13 @@ def test_nu_minus_below_one_iff_above_threshold() -> None:
 
 def test_metric_ordering_and_bk_below_opt() -> None:
     m = _svc().metrics()
-    assert 0.0 < m.e_fidelity_bk <= m.e_fidelity_opt  # F_opt >= F_BK pointwise
-    assert 0.0 < m.p_out < 1.0 and m.e_log_neg > 0.0
+    assert 0.0 < m.fidelity_bk_cond <= m.fidelity_opt_cond  # F_opt >= F_BK pointwise
+    assert 0.0 < m.p_out < 1.0 and m.log_neg > 0.0
+    assert m.one_minus_p_out == pytest.approx(1.0 - m.p_out, abs=1e-12)
+    # FR-SVC-E2 (g): E[F_opt | .] > 1/2 and E[nu~_- | .] < 1
+    assert m.fidelity_opt_cond > 0.5 and m.nu_minus_cond < 1.0
+    assert m.log_neg_cond == pytest.approx(m.log_neg / m.one_minus_p_out, rel=1e-12)
+    assert m.reason == ""
 
 
 def test_tmst_service_runs_and_uses_numeric_threshold() -> None:
@@ -164,7 +169,7 @@ def test_tmst_service_runs_and_uses_numeric_threshold() -> None:
     s = EntanglementService(c, NTH, PIChannel.identity(), 1.0, n_jpa=0.3)
     assert s.eta_star == pytest.approx(tmst_eta_star(NTH, 1.0, 0.3), abs=1e-13)
     assert 0.0 < s.p_out() < 1.0
-    assert s.metrics().e_log_neg > 0.0
+    assert s.metrics().log_neg > 0.0
     dead = EntanglementService(c, NTH, PIChannel.additive_noise(1.5), 1.0, n_jpa=0.3)
     assert dead.eta_star == 1.0 and dead.p_out() == 1.0
 
@@ -174,3 +179,33 @@ def test_p_out_zero_when_all_entangled() -> None:
     s = EntanglementService(c, 0.0, PIChannel.identity(), 1.0)  # n_th = 0: eta* = 0
     assert s.eta_star == 0.0 and s.p_out() == 0.0
     assert s.truncation_effect().delta == 0.0
+
+
+def test_conditional_averages_deterministic_channel() -> None:
+    """FR-SVC-E2 (f), near-deterministic: matches the single-realization values
+    to the Jensen gap of the residual scatter."""
+    # K large: the small-scale scatter is tiny, so eta is nearly deterministic and > eta* = 0.9992
+    c = CompoundPDT(SmallScale(1e9, 0.99999999), DeterministicLoss(1e-6))
+    s = EntanglementService(c, NTH, PIChannel.identity(), 1.0)
+    m = s.metrics()
+    eta = c.moment(1)
+    assert m.one_minus_p_out == pytest.approx(1.0, abs=1e-9)
+    assert m.nu_minus_cond == pytest.approx(
+        float(s.nu_minus(eta)), rel=5e-3
+    )  # Jensen gap of the residual scatter
+    assert m.fidelity_bk_cond == pytest.approx(float(s.fidelity_bk_at(eta)), rel=5e-3)
+
+
+def test_conditional_nan_when_never_entangled() -> None:
+    """FR-SVC-E2 (h): ``1 - P_out < 1e-12`` -> NaN with a reason, never 0."""
+    c = CompoundPDT(SmallScale(10.0, 0.9), DeterministicLoss(1e-5))
+    dead = EntanglementService(c, NTH, PIChannel.additive_noise(1.5), 1.0)
+    m = dead.metrics()
+    assert m.reason == "no entangled realizations"
+    assert np.isnan([m.nu_minus_cond, m.fidelity_opt_cond, m.fidelity_bk_cond]).all()
+    assert m.p_out == 1.0 and m.one_minus_p_out == 0.0 and m.log_neg == 0.0
+    # tiny survival (eta well below eta*): also NaN
+    far = EntanglementService(
+        CompoundPDT(SmallScale(0.0, 1.0), DeterministicLoss(5.0)), NTH, PIChannel.identity(), 1.0
+    )
+    assert np.isnan(far.metrics().nu_minus_cond)

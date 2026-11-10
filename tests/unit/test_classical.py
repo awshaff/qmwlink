@@ -146,6 +146,10 @@ def test_crossover_capacity_variant() -> None:
     rx = MeasuringReceiver(r.n_amp_req, "ssb")
     got = ClassicalService(comp, lambda e: c_rx(e, ns, NTH, rx)).ergodic()
     assert got == pytest.approx(0.9 * het.ergodic(), rel=1e-8)
+    # FR-SVC-C4 (f): 1.01x that N_amp falls below the target
+    rx_hi = MeasuringReceiver(1.01 * r.n_amp_req, "ssb")
+    below = ClassicalService(comp, lambda e: c_rx(e, ns, NTH, rx_hi)).ergodic()
+    assert below < 0.9 * het.ergodic()
     assert r.n_amp_req > 0.5
     d = crossover_capacity(het, ns, NTH, "dsb", 1e-6, 5e9, 300.0)
     assert math.isnan(d.s_e_req) and d.reason is not None and "image floor" in d.reason

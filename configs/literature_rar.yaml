@@ -1,4 +1,54 @@
-# Literature RAR points for the E6/E9(c) overlay (FR-EXP-7). Each entry REQUIRES
-# source, field_convention (rms|peak) and sideband (ssb|dsb); includes_bbr optional.
-# Empty on purpose: no values are entered without a verified citation (QUESTIONS Q-7).
-entries: []
+# Published Rydberg receiver points for the E5/E6/E8/E9(c) inputs (FR-EXP-7; TSD §16.3, from
+# configs/literature_q7_q11.yaml / Abdurrahman's compilation 2026-11-10).
+# s_e is converted to V/m/sqrt(Hz): 1 nV/cm/rtHz = 1e-7 V/m/rtHz. Unstated conventions are `peak`
+# (TSD §7.4 cross-check). Superheterodyne/LO entries are `dsb`. b_hz is null where not reported
+# (those entries are dropped from E5 when require_b_hz is true).
+entries:
+  - label: "Jing 2020 superheterodyne (6.94 GHz)"
+    f_hz: 6.94e9
+    s_e: 5.5e-6            # 55 nV/cm/rtHz
+    field_convention: peak # unstated in paper
+    includes_bbr: false
+    sideband: dsb
+    b_hz: null             # not reported (EIT bandwidth about 7.9 MHz is only a bound)
+    source: "Jing et al., Nat. Phys. 16, 911 (2020)"
+  - label: "Cai 2021 (10.68 GHz)"
+    f_hz: 10.68e9
+    s_e: 1.25e-6           # 12.5 nV/cm/rtHz
+    field_convention: peak # unstated
+    includes_bbr: false
+    sideband: dsb
+    b_hz: null
+    source: "Cai et al., arXiv:2111.06582 (2021)"
+  - label: "Borowka 2024 MW-to-optical converter (13.9 GHz)"
+    f_hz: 13.9e9
+    s_e: 3.98e-7           # 3.98 nV/cm/rtHz
+    field_convention: rms  # stated
+    includes_bbr: true
+    sideband: ssb          # [A] converter, not an LO mixer; verify
+    b_hz: 16.0e6
+    source: "S. Borowka et al., Nat. Photon. (2024), doi:10.1038/s41566-023-01295-w"
+  - label: "Yang 2024 (16.03 GHz)"   # VERIFY journal volume (TSD §16.7)
+    f_hz: 16.03e9
+    s_e: 6.2e-6            # 62 nV/cm/rtHz
+    field_convention: peak # unstated
+    includes_bbr: false
+    sideband: dsb
+    b_hz: 10.2e6
+    source: "Yang et al., Phys. Rev. Applied 21, L031003 (2024) [VERIFY]"
+  - label: "Legaie 2023 (95.99 GHz)"
+    f_hz: 95.99e9
+    s_e: 7.9e-6            # 7.9 uV/m/rtHz
+    field_convention: peak # unstated
+    includes_bbr: false
+    sideband: dsb
+    b_hz: 127.0e3
+    source: "Legaie et al., arXiv:2306.17114 (2023)"
+  - label: "She 2024 (338.7 GHz)"
+    f_hz: 338.7e9
+    s_e: 2.88e-4           # 2.88 uV/cm/rtHz
+    field_convention: peak # unstated
+    includes_bbr: false
+    sideband: dsb
+    b_hz: null
+    source: "She et al., Chin. Phys. Lett. 41, 084201 (2024)"

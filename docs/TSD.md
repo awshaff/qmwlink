@@ -1,6 +1,6 @@
 # TSD — Technical Specification
 
-**Project:** `qmwlink` · **Version:** 0.4.1 (2026-11-10; pairs with FSD v0.6.1; §14 is a pure-Python receiver physics model, no compiled code) · **Owner:** Abdurrahman
+**Project:** `qmwlink` · **Version:** 0.4.3 (2026-11-10; pairs with FSD v0.6.3; §14 is a pure-Python receiver physics model, no compiled code) · **Owner:** Abdurrahman
 **Reads with:** `docs/IDEA.md` (why), `docs/FSD.md` (what). This document is the single source of truth for formulas, algorithms, numerics, code identifiers and code layout. If code and TSD disagree, the code is wrong or the TSD needs a reviewed change; never silently diverge. FSD and TSD versions are bumped together.
 
 Status tags used below:
@@ -49,12 +49,13 @@ qmwlink/
 │   ├── experiments/  schema.py  runner.py  registry.py  e1.py … e9.py   §12
 │   ├── io/  export.py  latex.py  literature.py
 │   └── plotting/  style.py
+├── scripts/  derive_inputs.py  # regenerates the §16.1–16.2 ITU-derived inputs (needs optional `itur`)
 ├── tests/  unit/  validation/  regression/  tolerances.py
 └── results/                 # gitignored; figures, CSV, metadata
 ```
 The whole project is pure Python and is built by the coding agent.
 
-**Dependencies:** Python ≥ 3.11; `numpy`, `scipy`, `mpmath` (reference values in tests only), `matplotlib`, `pydantic` (config schema), `pyyaml`, `pytest`, `hypothesis`, `ruff`, `mypy`. Optional test oracle: `qutip`. No compiled extensions (Numba, Cython, C/C++); §14.12 shows they are not needed. No other dependencies without an entry in `QUESTIONS.md`.
+**Dependencies:** Python ≥ 3.11; `numpy`, `scipy`, `mpmath` (reference values in tests only), `matplotlib`, `pydantic` (config schema), `pyyaml`, `pytest`, `hypothesis`, `ruff`, `mypy`. Optional test oracle: `qutip`. Optional, scripts only (never imported by `src/`): `itur` 0.4.0 for `scripts/derive_inputs.py` (§16). No compiled extensions (Numba, Cython, C/C++); §14.12 shows they are not needed. No other dependencies without an entry in `QUESTIONS.md`.
 
 **Style:** pure functions on NumPy arrays where possible, vectorized over the transmissivity axis; small frozen dataclasses for parameter bundles; no hidden global state.
 
@@ -166,6 +167,7 @@ Parameters: $K\ge0$, scale $\bar\eta$ ($=\bar\eta_s$ for $N=1$, $=\bar\eta_\Sigm
   - **Why not `chi2`:** `scipy.stats.chi2`, `scipy.stats.gamma`, `special.gammainc` and `ncx2(nc=0)` share one code path that loses accuracy in the lower tail at large shape (cancellation in $a\ln y-y-\ln\Gamma(a+1)$, magnitude ~$10^9$). At $z=-5.5$ sd (cdf ≈ 1.8e-8), relative error is 3e-14 / 1.6e-6 / 2.3e-2 / 0.32 for $N=10^5/10^6/10^7/10^8$; the `ncx2` floor path gives 3e-14 / 2e-13 / 5e-13 / 1.2e-12 **[V]** (scipy 1.18.1; reference: series for $P(a,x)$ with an `mpmath` prefactor; QUESTIONS Q-3).
   - The fix relies on a scipy implementation detail, so it is guarded by the pinned regression test `test_ncx2_floor_tail` (§10): the four points above, both tails, `rtol=1e-6`. A scipy upgrade that fails it blocks the upgrade.
   - Closed forms (truncated exponential for $N=1$, truncated Erlang for small $N$) are test oracles only, at $N\le100$.
+- **Very large $\lambda$ (QUESTIONS Q-9, accepted as documented limit):** `ncx2.sf` warns "Series did not converge" in the far upper tail for $\lambda\gtrsim2\times10^{10}$ (e.g. $N=1$, $K=10^{10}$, 8 sd above the mean); the bulk and lower tail still match the normal limit to 4 digits. Supported range for the upper-tail sf: $K\le10^9$. Limit tests for $K\to\infty$ use $K=10^9$; configured experiments use $K\le100$. A `RuntimeWarning` from this path is promoted to an error in tests, so a silent excursion past the limit fails.
 - **Large $N$ (up to $10^8$):** covered by the same helper and the same regression test; NFR-2 (1% relative down to 1e-8) is the requirement, the regression gate is tighter on purpose.
 - **Samplers.**
   - `sample_sum` (default, any $N$): draw $X\sim\chi'^2(2N,2NK)$ with `Generator.noncentral_chisquare` (or `chisquare` for $K=0$), set $\eta=\sigma_N^2X$, and reject if $\eta>1$. This is exact for passive MRC because the joint truncation constrains only the sum.
@@ -182,6 +184,10 @@ Parameters: $K\ge0$, scale $\bar\eta$ ($=\bar\eta_s$ for $N=1$, $=\bar\eta_\Sigm
 ### 6.2 Large-scale PDT (FR-CH-2,3)
 **Primary: shifted log-gamma [D].** $\Psi=\Psi_0+G$, $\Psi_0\ge0$ deterministic (absorption, $\gamma_{\rm abs}d$), $G\sim\mathrm{Gamma}(k,\theta)$ (shape–scale), $\eta_\ell=e^{-\Psi}\in(0,e^{-\Psi_0}]$.
 - From stochastic mean/variance $(\mu_G,\sigma_G^2)$: $k=\mu_G^2/\sigma_G^2$, $\theta=\sigma_G^2/\mu_G$.
+- **Per-metre parameterization (config default) [D]:** weather-driven loss (water vapour, rain) is specified per metre as $(m_1,s_1)$ per band, `stochastic_per_m`. On links up to ~1 km one weather state covers the whole path, so the path is fully correlated **[A]** and both moments scale linearly: $\mu_G=m_1d$, $\sigma_G=s_1d$. Hence $k=m_1^2/s_1^2$ is distance-independent and $\theta=(s_1^2/m_1)\,d$.
+  - Partially correlated paths ($\sigma_G\propto\sqrt d$, longer links) are out of scope; a config that needs them must say so and is rejected until implemented.
+  - The legacy per-link form `stochastic: {mean, std}` remains accepted for unit tests and sensitivity sweeps only; it is flagged `per_link=True` in `meta.json`.
+  - Reference values (KHU Seoul, ITU-R climatology) are in §16.2.
 - pdf (log-domain): with $u=-\ln\eta-\Psi_0>0$, $\ln f_\ell(\eta)=(k-1)\ln u-u/\theta-\ln\Gamma(k)-k\ln\theta-\ln\eta$; zero for $u\le0$.
 - cdf: $P(\eta_\ell\le x)=Q(k,\,u_x/\theta)$ with $u_x=-\ln x-\Psi_0$ (`gammaincc`); equals 1 when $u_x\le0$. Survival: `gammainc`.
 - Moments: $\mathbb E[\eta_\ell^m]=e^{-m\Psi_0}(1+m\theta)^{-k}$ **[V]** ($\Psi_0=0$, $k=4,\theta=0.01$: 0.96098 analytic vs 0.96095 MC).
@@ -281,7 +287,7 @@ $$N_{\rm amp}=\frac{S_E^2A_e}{\eta_0hf}.$$
   - If $E_{\rm rx,pk}>E_{1\rm dB,pk}$, set `linear_regime=False` on results; do not alter numbers.
   - Never compare an rms field with a peak field.
 - **Model-derived alternative:** `RydbergReceiver.from_physics(model_params)` takes $S_E$, $B$ and $E_{1\rm dB}$ from §14 instead of literature inputs.
-- **[A]** Cross-check this aperture convention against Santamaría Botello et al. (arXiv 2209.00908) before quoting absolute numbers in the paper (IDEA R5). Record the outcome in `docs/RESULTS.md`.
+- **Aperture/field convention cross-check (resolved 2026-11-10) [V]:** Santamaría Botello et al. (arXiv 2209.00908) relate field and power by $P=G\frac{\lambda^2}{4\pi}\frac{|E|^2}{2\eta_0}$ with $G=3/2$, i.e. a **peak** field and the same $A_e=3\lambda^2/8\pi$ as here. Reading their 1.25 µV/m/√Hz at 10 GHz as peak, the $N_{\rm amp}$ mapping above gives $T=16{,}114$ K, against their 16,100 K; an rms reading would give 32,228 K. So literature NEFs with no stated convention are entered as `peak` (§16.3). Record in `docs/RESULTS.md`.
 
 ### 7.5 Coherent transducer front end (FR-RX-5)
 `PIChannel` = attenuator $(\eta_t,\bar n_t)$ followed by optional additive noise $N_t$: $\tau_r=\eta_t$, $y_r=(1-\eta_t)(2\bar n_t+1)+2N_t$. Parameter values: config only, with `source:` **[A]**.
@@ -308,7 +314,13 @@ For TMST inputs, solve §5.4 numerically per realization (`brentq` in $1-\eta$).
 Metrics over the compound PDT $f(\eta)$:
 - $P_{\rm out}=F(\eta^\*_{\rm rx})$ (§6.4).
 - $\mathbb E[E_N]=\int_{\eta^\*_{\rm rx}}^1E_N(\eta)f(\eta)\,d\eta$, computed as a nested integral in $\Psi$-space, cross-checked by MC (§10.1).
-- $\mathbb E[\tilde\nu_-]$, $\mathbb E[F_{\rm opt}]$, $\mathbb E[F_{\rm BK}]$ likewise.
+- **Conditional ("when the link works") averages [D]** for $\tilde\nu_-$, $F_{\rm opt}$ and $F_{\rm BK}$ (QUESTIONS Q-8; decided by Abdurrahman 2026-11-10). With $g\in\{\tilde\nu_-,F_{\rm opt},F_{\rm BK}\}$:
+$$\mathbb E[g\mid\eta>\eta^\*_{\rm rx}]=\frac{1}{1-P_{\rm out}}\int_{\eta^\*_{\rm rx}}^1 g(\eta)f(\eta)\,d\eta.$$
+  - Code names `nu_minus_cond`, `fidelity_opt_cond`, `fidelity_bk_cond`. The bare restricted integral (without the division) is an internal quantity, never reported.
+  - If $1-P_{\rm out}<10^{-12}$ (link essentially always down), return `NaN` with reason `"no entangled realizations"`; never 0.
+  - Every figure or table that shows a conditional average also shows $1-P_{\rm out}$ next to it, so a high fidelity on a rarely working link is not misread.
+  - Sanity: $\mathbb E[F_{\rm opt}\mid\cdot]>1/2$ and $\mathbb E[\tilde\nu_-\mid\cdot]<1$ always, since $\tilde\nu_-<1\iff F_{\rm opt}>1/2$ for each realization. No such bound holds for $F_{\rm BK}$.
+- $\mathbb E[E_N]$ stays the **unconditional** mean above (its integrand is 0 in outage, so it is already "per attempt"). The conditional version is $\mathbb E[E_N]/(1-P_{\rm out})$ and may be reported as `log_neg_cond`.
 - **Truncation effect (RQ1, E1):** $\Delta P_{\rm out}=P_{\rm out}-P_{\rm out}^{\rm surr}$, where $P_{\rm out}^{\rm surr}$ uses `surrogate_cdf` (§6.1) in place of the truncated small-scale cdf in the §6.4 nested integral. Report $\Delta P_{\rm out}$ and $P_{\rm out}/P_{\rm out}^{\rm surr}$ next to the removed mass $1-\mathcal Z_{K,N}$. Identity check: with a deterministic large-scale factor and $\eta^\*/\eta_\ell<1$, $P_{\rm out}/P_{\rm out}^{\rm surr}=1/\mathcal Z_{K,N}$ to `rtol=1e-12`.
 
 **Limiting cases (regression tests).** The small-scale cdf is always evaluated with the clamp $F_s(\min\{x,1\})$, and the tests include $\eta_\ell<\eta^\*$, where the clamp is active.
@@ -341,7 +353,7 @@ $$S_E^{\rm req}=\sqrt{N_{\rm amp}^{\rm req}\,\eta_0hf/A_e}\quad(\text{rms}).$$
 - References at 5 GHz, 300 K, $\eta\to0$ **[V]**:
   - SSB: $\Delta=3$ dB → $N_{\rm amp}^{\rm req}=1245.27$, $S_E^{\rm req}/S_{E,\rm BBR}=0.99823$.
   - DSB: $\Delta=4$ dB → $N_{\rm amp}^{\rm req}=641.71$, ratio 0.71659; $\Delta=6$ dB → 2479.22, ratio 1.40849.
-- Capacity-based variant: smallest $N_{\rm amp}$ with $\bar C_{\rm rx}\ge(1-\delta)\bar C_{\rm het}$, solved by `brentq` on $\log N_{\rm amp}$.
+- Capacity-based variant: **largest tolerable** $N_{\rm amp}$ with $\bar C_{\rm rx}\ge(1-\delta)\bar C_{\rm het}$, solved by `brentq` on $\log N_{\rm amp}$ (QUESTIONS Q-10). $\bar C_{\rm rx}$ is non-increasing in $N_{\rm amp}$, so every smaller $N_{\rm amp}\ge\tfrac12$ also satisfies the constraint; the boundary is the meaningful quantity and matches what the dB-penalty closed form returns. If even $N_{\rm amp}=\tfrac12$ fails (e.g. `dsb` against a tight $\delta$), return `NaN` with a reason.
 - In the RJ regime $S_{E,\rm BBR}\propto f$; E6 must show this slope as a sanity check, and must plot SSB and DSB required-$S_E$ curves separately.
 
 ### 8.4 RAR vs LNA throughput map (FR-SVC-C5, RQ5) [D]
@@ -455,9 +467,14 @@ small_scale: {K: [0, 10, 100]}
 large_scale:
   model: loggamma            # loggamma | lognormal_v0 | lognormal_conditioned
   psi0_from_absorption: true
-  gamma_abs_per_m: {5: 1.44e-6}            # per band, source required
-  gamma_abs_source: "Gonzalez-Raya et al., PRApplied 18, 044002 (2022)"
-  stochastic: {mean: 1.0e-3, std: 5.0e-4}   # [A] placeholder, Abdurrahman to set
+  gamma_abs_per_m: {5: 1.524e-6, 30: 4.394e-6, 100: 6.641e-6, 300: 5.088e-6}   # O2 only, §16.1
+  gamma_abs_source: "ITU-R P.676-12 Annex 1, 1013.25 hPa, 300 K (itur 0.4.0)"
+  stochastic_per_m:                         # water vapour + rain, KHU Seoul, §16.2
+    5:   {mean: 4.160e-7, std: 9.028e-7}
+    30:  {mean: 2.839e-5, std: 6.760e-5}
+    100: {mean: 1.509e-4, std: 2.049e-4}
+    300: {mean: 1.523e-3, std: 1.101e-3}
+  stochastic_source: "ITU-R P.836 + P.676-12 (vapour), P.837-7 + P.838-3 (rain), annual, 37.597N 127.052E"
 link_budget:
   coupling_model: goubau     # goubau | friis_clipped (baseline, physical=False)
   A_t_m2: 2.0                # [A] near-field apertures; a 30 dBi horn to a bare dipole gives outage = 1 everywhere
@@ -474,24 +491,26 @@ Receivers in E5/E6/E8 declare `sideband` and, for the RAR, `field_convention`; e
 E2 adds `law_comparison: {match: psi_moments, eta_gt1: clip, sigma_ratio: [...]}` (§6.2). E5 adds the throughput-map block (§8.4):
 ```yaml
 throughput_map:
-  P_t_w: null                # [A] equal TX power for both receivers
+  P_t_w: 0.2                 # [A] design choice (23 dBm, 3GPP power class 3); equal for both receivers
   f_ghz: {start: 5, stop: 300, num: 40, scale: log}
   distance_m: {start: 10, stop: 1000, num: 40, scale: log}
   K: [0, 10, 100]
-  rar: {source: literature_rar, sideband: dsb}       # per-band S_E, B_RAR [A], IDEA Q2
-  lna: {bands: [], tn_convention: rj, sideband: ssb} # per-band {f_hz, T_n_k, B_hz, source} [A]
+  rar: {source: literature_rar, require_b_hz: true, sideband: from_entry}   # §16.3
+  lna: {bands: [...], B_hz: [...], tn_convention: rj, sideband: ssb}        # §16.4
   interpolate: loglog        # no extrapolation; out-of-range cells are masked
+  equal_bandwidth_case: true # also run with B_LNA := B_RAR per cell (separates noise gap from bandwidth gap)
 ```
 
-`configs/literature_rar.yaml` entries (FR-EXP-7):
+`configs/literature_rar.yaml` entries (FR-EXP-7; full sourced list in §16.3):
 ```yaml
-- label: "example"
-  f_hz: 5.0e9
-  s_e: 1.0e-6                 # V m^-1 Hz^-1/2
-  field_convention: rms       # rms | peak  (required)
-  includes_bbr: false
-  sideband: dsb
-  source: "..."               # required
+- label: "Borowka 2024 MW-to-optical converter (13.9 GHz)"
+  f_hz: 13.9e9
+  s_e: 3.98e-7                # V m^-1 Hz^-1/2 (= 3.98 nV/cm/rtHz)
+  field_convention: rms       # rms | peak  (required); unstated in paper -> peak (§7.4)
+  includes_bbr: true
+  sideband: ssb               # ssb | dsb (required)
+  b_hz: 16.0e6                # optional; instantaneous bandwidth, needed by E5 (§8.4)
+  source: "S. Borowka et al., Nat. Photon. (2024), doi:10.1038/s41566-023-01295-w"   # required
 ```
 
 E9 adds a `lindblad:` block (all values `# [A]` until Abdurrahman fills them with sources):
@@ -675,6 +694,17 @@ E9 therefore fits NFR-3 (< 5 min per figure). These per-class costs are recorded
 
 ## 15. Changelog
 
+**0.4.3 (2026-11-10)**, paired with FSD v0.6.3. Resolves QUESTIONS Q-7, Q-9, Q-10, Q-11.
+- §6.1 (Q-9): `ncx2.sf` upper tail supported for $K\le10^9$; the warning is an error in tests.
+- §6.2: per-metre, fully correlated parameterization `stochastic_per_m` ($k$ distance-independent, $\theta\propto d$); per-link form kept for tests and sweeps only.
+- §7.4: the aperture/field convention cross-check against Santamaría Botello is resolved; unstated literature NEFs are peak.
+- §8.3 (Q-10): capacity-based crossover returns the largest tolerable $N_{\rm amp}$.
+- §12: config examples carry the sourced values; `b_hz` added to `literature_rar.yaml`; E5 adds `equal_bandwidth_case`.
+- §16 (new; Q-7, Q-11): sourced reference inputs (ITU absorption, Seoul weather statistics, published RAR points, LNAs, channel bandwidths, transducers, aperture reach), with the items still [A]. `scripts/derive_inputs.py` and optional `itur` added in §1.
+
+**0.4.2 (2026-11-10)**, paired with FSD v0.6.2. Resolves QUESTIONS Q-8.
+- §8.1: averages of $\tilde\nu_-$, $F_{\rm opt}$, $F_{\rm BK}$ are conditional on the link working ($\eta>\eta^\*_{\rm rx}$), normalized by $1-P_{\rm out}$; `NaN` when no realization is entangled; always reported next to $1-P_{\rm out}$. $\mathbb E[E_N]$ stays unconditional, with an optional conditional variant.
+
 **0.4.1 (2026-11-10)**, paired with FSD v0.6.1. Resolves QUESTIONS Q-3, Q-4, Q-5 and adds the RQ1/RQ2/RQ5 outputs.
 - **Numerics:**
   - §6.1 (Q-3): every surrogate cdf/sf, including $K=0$, goes through the `ncx2` floor helper ($\lambda\ge10^{-300}$); `chi2`/`gamma`/`gammainc` lose up to 32% relative accuracy at $N=10^8$ in the lower tail **[V]**. Pinned regression `test_ncx2_floor_tail` added; the `gamma(N, scale=2σ²)` alternative removed. §6.2 and §13 rule 10 extend this to large-shape log-gamma.
@@ -707,3 +737,98 @@ E9 therefore fits NFR-3 (< 5 min per figure). These per-class costs are recorded
 - **Config:** §12 example now uses near-field apertures and adds `literature_rar.yaml`, `sideband`, `field_convention` and `tn_convention`.
 
 **0.3 (2026-11-03)** — initial version.
+
+## 16. Sourced reference inputs (Q-7, Q-11)
+
+The real-world values behind the configs, compiled 2026-11-10. Tags follow §2: **[L]** literature value as published, **[V]** derived and checked here, **[A]** still a design choice or assumption. Every config value still carries its own `source:`; this section is the reference, not a substitute for it.
+
+### 16.1 Gas absorption (E3, deterministic $\Psi_0$) [V]
+ITU-R P.676-12 Annex 1 line-by-line (`itur` 0.4.0), $p=1013.25$ hPa, $T=300$ K (= $T_{\rm env}$). Conversion: $\gamma[1/{\rm m}]=\gamma[{\rm dB/km}]\cdot\ln10/10^4$.
+
+| Band | O₂ only, $\Psi_0$ per m (config) | Standard atm., $\rho=7.5$ g/m³ (dB/km) | Humid, $\rho=20$ g/m³ (dB/km) |
+|---|---|---|---|
+| 5 GHz | 1.524e-6 | 0.0078 | 0.011 |
+| 30 GHz | 4.394e-6 | 0.085 | 0.225 |
+| 100 GHz | 6.641e-6 | 0.395 | 1.28 |
+| 300 GHz | 5.088e-6 | 4.58 | 15.0 |
+
+- Only O₂ enters $\Psi_0$. Water vapour is weather-dependent, so it goes into $G$ (§16.2).
+- Cross-check: Gonzalez-Raya et al. (PRApplied 18, 044002, 2022) use 1.44e-6 /m at 5 GHz (O₂), within 6%. With 1.524e-6 the absorption-only range at $\eta^\*$ is 525 m, against 555.47 m with 1.44e-6 (§11 keeps the latter as a code-path reference).
+
+### 16.2 Weather-driven stochastic loss $G$ (E3) [V]
+Annual climatology at Kyung Hee Univ. Seoul campus (37.597 N, 127.052 E):
+- **Water vapour:** P.836 surface density (median 7.96 g/m³, 1 % exceedance 22.5 g/m³), mapped through P.676-12 at 300 K. Quantiles integrated over 0.1–99 %.
+- **Rain:** P.837-7 rain rate (P₀ = 6.10 %, R₀.₀₁ = 60.6, R₀.₁ = 20.1, R₁ = 3.85 mm/h), mapped through P.838-3 (horizontal path, circular polarization). Exceedance integrated from 0.001 % to P₀.
+- Vapour and rain are treated as independent; moments are per metre (§6.2).
+
+| Band | $m_1$ (per m) | $s_1$ (per m) | $k=m_1^2/s_1^2$ | Rain share of variance |
+|---|---|---|---|---|
+| 5 GHz | 4.160e-7 | 9.028e-7 | 0.21 | 90 % |
+| 30 GHz | 2.839e-5 | 6.760e-5 | 0.18 | 95 % |
+| 100 GHz | 1.509e-4 | 2.049e-4 | 0.54 | 80 % |
+| 300 GHz | 1.523e-3 | 1.101e-3 | 1.91 | 3 % |
+
+- $k<1$ below 300 GHz: the density piles up near $G=0$ (dry most of the time), with a long rain tail.
+- These are annual statistics; a single season (monsoon) is worse. Every E3 caption states the location and "annual".
+- `scripts/derive_inputs.py` must reproduce both tables to 3 significant figures from the stated ITU recommendations, location and integration ranges.
+
+### 16.3 Published Rydberg receiver points (E5, E6, E8; `literature_rar.yaml`) [L]
+$N_{\rm amp}$ and $T_{\rm equiv}=N_{\rm amp}hf/k_B$ are derived [V] with the §7.4 mapping; unstated conventions are read as peak (§7.4 cross-check). "Gap" is a preview against a room-temperature LNA (§16.4) at equal bandwidth, long link ($\eta\to0$), power-limited; E5 is authoritative.
+
+| Entry | $f$ (GHz) | $S_E$ as published | Convention | Bandwidth | $N_{\rm amp}$ | $T_{\rm equiv}$ | Gap |
+|---|---|---|---|---|---|---|---|
+| Jing 2020, Nat. Phys. 16, 911 | 6.94 | 55 nV/cm/√Hz | peak (unstated) | n/r (EIT ≈ 7.9 MHz bound) | 1.9e6 | 6.5e5 K | 33 dB |
+| Cai 2021, arXiv:2111.06582 | 10.68 | 12.5 nV/cm/√Hz | peak (unstated) | n/r | 2.8e4 | 1.4e4 K | 16 dB |
+| Borówka 2024, Nat. Photon., doi:10.1038/s41566-023-01295-w | 13.9 | 3.98 nV/cm/√Hz | rms (stated) | 16 MHz | 2.1e3 (BBR removed) | 1.4e3 K | 7 dB |
+| Yang 2024, PRApplied 21, L031003 (VERIFY) | 16.03 | 62 nV/cm/√Hz | peak (unstated) | 10.2 MHz | 2.0e5 | 1.5e5 K | 26 dB |
+| Legaie 2023, arXiv:2306.17114 | 95.99 | 7.9 µV/m/√Hz | peak (unstated) | 127 kHz | 1.5e3 | 7.0e3 K | 11 dB |
+| She 2024, Chin. Phys. Lett. 41, 084201 | 338.7 | 2.88 µV/cm/√Hz | peak (unstated) | n/r | 4.6e4 | 7.5e5 K | ~29 dB (LNA extrapolated) |
+
+- Superheterodyne/LO-based entries are `dsb` (no image rejection). Borówka is a converter, not an LO mixer: `ssb` **[A]**, verify.
+- Bandwidth-only references: Yan et al., arXiv:2506.10541 (54.6 MHz at 140.4 nV/cm/√Hz, carrier not stated); Holloway et al., arXiv:1903.10644 (19.6 GHz, atomic response ≈ 3–10 MHz).
+- With `require_b_hz: true`, E5's RAR range is 13.9–96 GHz; the other cells are masked.
+
+### 16.4 Room-temperature LNAs and channel bandwidths (E5, E8) [L]
+
+| $f$ anchor | $T_n$ | Source | $N_{\rm amp}=k_BT_n/hf$ |
+|---|---|---|---|
+| 5, 15 GHz | 57 K (NF 0.78 dB) | Low Noise Factory LNF-LNR1_15B_SV (1–15 GHz, 296 K) | 238 at 5 GHz |
+| 22 GHz | 129 K (NF 1.6 dB) | LNF-LNR16_28WA_SV (16–28 GHz) | 122 |
+| 30, 60 GHz | 200 K (NF 2.3 dB) | LNF-LNR26_62A_SV (26–62 GHz) | 139 at 30 GHz |
+| 96 GHz | 280 K (NF 2.86 dB) | LNF-LNR55_96WA_SV (55–96 GHz) | 61 |
+| 243 GHz | 627 K (NF 5.0 dB) | Tessmann et al., Int. J. Microw. Wirel. Technol. 6, 215 (2014), 35 nm mHEMT | 54 |
+
+- No sourced standalone LNA at 300 GHz, so LNA cells above 243 GHz are masked. Full-receiver reference only: Soylu et al., IEEE RFIC 2023, 280 GHz InP HBT receiver, 10.8–11.6 dB **DSB** NF (261–300 GHz).
+- System channel bandwidth $B_{\rm LNA}$: 160 MHz at 5 GHz (IEEE 802.11ax); 400 MHz at 30 GHz (3GPP TS 38.101-2 FR2 maximum); 2.16 GHz at 300 GHz (smallest IEEE 802.15.3d channel, 252.72–321.84 GHz; Petrov et al., arXiv:2011.01683); 2.16 GHz at 100 GHz **[A]**.
+
+### 16.5 Coherent front-end classes (E4) [L]
+PIChannel (§7.5) with $\bar n_t=0$, $N_t=\eta_tN_{\rm add}$, so $N_r=N_{\rm add}$ exactly. The window depends only on $N_{\rm add}$; $\eta_t$ affects rate only. Thresholds [V] at 5 GHz, 300 K.
+
+| Class | $\eta_t$ | $N_{\rm add}$ (input-referred) | $\eta^\*_{\rm rx}$ | $1-\eta^\*_{\rm rx}$ | Source |
+|---|---|---|---|---|---|
+| Ideal | 1 | 0 | 0.999200 | 8.0e-4 | — |
+| Electro-optic, low noise (pulsed) | 0.087 | 0.16 | 0.999328 | 6.7e-4 | Sahu et al., Nat. Commun. (2022) |
+| Electro-optic, high efficiency (pulsed) | 0.15 | 0.41 | 0.999528 | 4.7e-4 | Sahu et al. (2022) |
+| Phase-insensitive amplifier bound | — | 0.5 | 0.999600 | 4.0e-4 | Caves, PRD 26, 1817 (1982) |
+| Piezo-optomechanical, low noise (CW, 5.07 GHz) | 0.0047 | 0.58 | 0.999664 | 3.4e-4 | Zhao et al., Nat. Nanotechnol. (2025); arXiv:2406.02704 |
+| Rydberg mm-wave→optical (99.4 GHz, 5 K, internal η) | 0.58 | 0.60 | 0.999680 | 3.2e-4 | Kumar et al., Nature 615, 614 (2023) |
+| Piezo-optomechanical, high efficiency | 0.022 | 0.94 | 0.999952 | 4.8e-5 | Zhao et al. (2025) |
+| Cryogenic HEMT 1.5 K (outside E4 axis) | — | 6.25 | — | entanglement-breaking | LNF-LNC4_8F_LG datasheet |
+
+### 16.6 Apertures (E3) [A]
+$A_t=A_r=2$ m² is a design choice: about a 2.0 m dish at aperture efficiency $e_a=0.65$, the parameterization of Gonzalez-Raya Eq. (66–67). The geometric entanglement reach is $d_{\max}=A/(\lambda\sqrt{\ln(1+\bar n_{\rm th})})$ before absorption:
+
+| Band | 5 GHz | 30 GHz | 100 GHz | 300 GHz |
+|---|---|---|---|---|
+| $d_{\max}$ (2 m²) | 12.5 m | 86.6 m | 327.7 m | 1144 m |
+
+E3's 10–1000 m grid is therefore in outage almost everywhere at 5 GHz. That is the aperture-limited result, not a defect; a swept-aperture panel is recommended.
+
+### 16.7 Still [A] after this pass
+- Apertures (§16.6) and $P_t=0.2$ W (design choices).
+- $B_{\rm LNA}$ at 100 GHz.
+- A standalone LNA at 300 GHz.
+- RAR bandwidths for the Jing, Cai and She entries.
+- Borówka's sideband.
+- Yang 2024 journal volume (VERIFY).
+- Full-path correlation of weather loss (§6.2).

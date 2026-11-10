@@ -1,37 +1,44 @@
 experiment: e5_classical_throughput
 environment: {T_env_k: 300.0}
-p_t_w: 1.0e-6        # [A] equal TX power for both receivers (placeholder)
-n_s: [1.0e4]         # [A] photons/mode for the bits-per-mode panel
-bands_ghz: [5, 30, 100, 300]
-f_ghz: {start: 5, stop: 300, num: 8, scale: log}
-distance_m: {start: 10, stop: 1000, num: 8, scale: log}
-small_scale: {K: [0, 10, 100]}
-large_scale:
-  model: loggamma
-  gamma_abs_per_m: {5: 1.44e-6, 30: 0.0, 100: 0.0, 300: 0.0}
-  gamma_abs_source:
-    5: "Gonzalez-Raya et al., PRApplied 18, 044002 (2022)"
-    30: "[A] placeholder, no absorption (ITU-R P.676 value to be supplied)"
-    100: "[A] placeholder, no absorption (ITU-R P.676 value to be supplied)"
-    300: "[A] placeholder, no absorption (ITU-R P.676 value to be supplied)"
-  stochastic: {mean: 1.0e-3, std: 5.0e-4}   # [A] placeholder (Q-7)
-link_budget: {coupling_model: goubau, A_t_m2: 2.0, A_r_m2: 2.0, G_enh: 1.0, sensitivity_models: [goubau]}
+n_s: [1.0e4]                 # N_s sweep value for the bits-per-mode panel (a); a sweep parameter, not a measurement
+bands_ghz: [15, 30, 60, 95]  # panel (a): inside both the RAR (13.9-96 GHz) and LNA (5-243 GHz) ranges
 receivers:
   - {label: "Holevo", kind: holevo}
   - {label: "ideal het", kind: het}
   - {label: "ideal hom", kind: hom}
-# Per-band inputs for the rho map. ALL [A] illustrative placeholders, not literature values (Q-7).
-rar_field_convention: rms
-rar_sideband: dsb
-rar_bands:
-  - {f_ghz: 5,   bandwidth_hz: 1.0e6, value: 2.0e-7, source: "[A] placeholder"}
-  - {f_ghz: 30,  bandwidth_hz: 1.0e6, value: 3.0e-7, source: "[A] placeholder"}
-  - {f_ghz: 100, bandwidth_hz: 1.0e6, value: 5.0e-7, source: "[A] placeholder"}
-  - {f_ghz: 300, bandwidth_hz: 1.0e6, value: 1.0e-6, source: "[A] placeholder"}
-lna_tn_convention: rj
-lna_sideband: ssb
-lna_bands:
-  - {f_ghz: 5,   bandwidth_hz: 1.0e8, value: 50.0,   source: "[A] placeholder"}
-  - {f_ghz: 30,  bandwidth_hz: 1.0e8, value: 100.0,  source: "[A] placeholder"}
-  - {f_ghz: 100, bandwidth_hz: 1.0e8, value: 300.0,  source: "[A] placeholder"}
-  - {f_ghz: 300, bandwidth_hz: 1.0e8, value: 1000.0, source: "[A] placeholder"}
+large_scale:
+  model: loggamma
+  psi0_from_absorption: true
+  gamma_abs_per_m: {5: 1.524e-6, 30: 4.394e-6, 100: 6.641e-6, 300: 5.088e-6}
+  gamma_abs_source: "ITU-R P.676-12 Annex 1 (via itur 0.4.0), O2 only, 1013.25 hPa, 300 K"
+  stochastic_per_m:
+    5:   {mean: 4.160e-7, std: 9.028e-7}
+    30:  {mean: 2.839e-5, std: 6.760e-5}
+    100: {mean: 1.509e-4, std: 2.049e-4}
+    300: {mean: 1.523e-3, std: 1.101e-3}
+  stochastic_source: "ITU-R P.836 + P.676-12 (vapour), P.837-7 + P.838-3 (rain), annual, KHU Seoul 37.597N 127.052E"
+link_budget: {coupling_model: goubau, A_t_m2: 2.0, A_r_m2: 2.0, G_enh: 1.0, sensitivity_models: [goubau]}
+throughput_map:
+  P_t_w: 0.2                 # [A] design choice (23 dBm, 3GPP power class 3); equal for both receivers
+  f_ghz: {start: 13.9, stop: 96, num: 8, scale: log}
+  distance_m: {start: 10, stop: 1000, num: 8, scale: log}
+  K: [0, 10, 100]
+  rar: {source: literature_rar, literature: configs/literature_rar.yaml, require_b_hz: true, sideband: from_entry}
+  lna:
+    tn_convention: rj
+    sideband: ssb
+    bands:                   # room-temperature LNAs, datasheet typical values at 296 K (TSD §16.4)
+      - {f_hz: 5.0e9,   T_n_k: 57,  source: "Low Noise Factory LNF-LNR1_15B_SV, 1-15 GHz, 57 K (NF 0.78 dB)"}
+      - {f_hz: 15.0e9,  T_n_k: 57,  source: "LNF-LNR1_15B_SV band edge (typical over band)"}
+      - {f_hz: 22.0e9,  T_n_k: 129, source: "LNF-LNR16_28WA_SV, 16-28 GHz, 129 K (NF 1.6 dB)"}
+      - {f_hz: 30.0e9,  T_n_k: 200, source: "LNF-LNR26_62A_SV, 26-62 GHz, 200 K (NF 2.3 dB), datasheet 2022-10-10"}
+      - {f_hz: 60.0e9,  T_n_k: 200, source: "LNF-LNR26_62A_SV"}
+      - {f_hz: 96.0e9,  T_n_k: 280, source: "LNF-LNR55_96WA_SV, 55-96 GHz, 280 K (NF 2.86 dB)"}
+      - {f_hz: 243.0e9, T_n_k: 627, source: "Tessmann et al., Int. J. Microw. Wirel. Technol. 6, 215 (2014): NF 5.0 dB at 243 GHz (35 nm mHEMT)"}
+    B_hz:                    # system channel bandwidth for the LNA link
+      - {f_hz: 5.0e9,   B: 160.0e6, source: "IEEE 802.11ax 160 MHz channel"}
+      - {f_hz: 30.0e9,  B: 400.0e6, source: "3GPP TS 38.101-2, FR2 maximum channel bandwidth"}
+      - {f_hz: 100.0e9, B: 2.16e9,  source: "[A] no W-band standard sourced; set equal to the 300 GHz minimum"}
+      - {f_hz: 300.0e9, B: 2.16e9,  source: "IEEE 802.15.3d (252.72-321.84 GHz), smallest of 2.16-69.12 GHz channels"}
+  interpolate: loglog
+  equal_bandwidth_case: true

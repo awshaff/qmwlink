@@ -89,3 +89,21 @@
 - Tests: 361 total (all tiers, ~100 s), coverage 99%; ruff + mypy --strict clean.
 - Runtime: E6 under 1 s, E8 34 s, E5 1 min 48 s (8 x 8 x 3 map).
 - Open findings: Q-10 ("smallest N_amp" wording), Q-11 (E5/E6/E8 placeholder inputs); Q-7, Q-8, Q-9 unchanged.
+
+### M4 revision after FSD v0.6.3 / TSD v0.4.3 (closes Q-7..Q-11)
+- Q-8: `EntanglementMetrics` reports `log_neg` (unconditional) and conditional `nu_minus_cond`, `fidelity_opt_cond`,
+  `fidelity_bk_cond`, `log_neg_cond`, each next to `one_minus_p_out` (from the survival function); NaN with reason
+  "no entangled realizations" when `1 - P_out < 1e-12`.
+- Q-7: `LargeScale` takes per-metre `stochastic_per_m` per band (fully correlated path, `mu_G = m1 d`, `sigma_G = s1 d`, `k` constant in `d`),
+  with `stochastic_source`; legacy per-link form kept and flagged `per_link` in `meta.json`; `correlation: partial` rejected.
+  E3/E5/E8 configs carry the sourced ITU O2 absorption and KHU Seoul weather values (annual). E4 uses the published
+  transducer classes (`N_t = eta_t N_add_in` checked); 5 GHz thresholds match TSD §16.5.
+- Q-11: `literature_rar.yaml` filled from TSD §16.3 (`f_hz`, optional `b_hz`, `includes_bbr`); N_amp / T_equiv of all six entries reproduce the
+  TSD table. E5 uses the RAR points with `b_hz` (13.9-96 GHz) and the LNA datasheet table (5-243 GHz), log-log interpolated and masked
+  outside, nearest-entry sideband, P_t = 0.2 W, and adds the equal-bandwidth case (`rho_equal_b_db`). E8 runs at 30 GHz.
+  A unit slip (nV/cm vs V/m) in my first YAML transcription was caught by that cross-check and fixed.
+- Q-9: `filterwarnings = error::RuntimeWarning` in pytest. Q-10: no code change (already the largest tolerable N_amp); AC (f) 1.01x check added.
+- Not done: `scripts/derive_inputs.py` (TSD §16, needs optional `itur`, not installed; the exact integration ranges would need confirming).
+- Tests: 368 total, ruff + mypy --strict clean. E5 now takes several minutes (k < 1 weather laws).
+- Preview (placeholders replaced by sourced inputs, E5, P_t = 0.2 W): rho between -36.6 and -12.0 dB over 13.9-96 GHz; equal-bandwidth
+  rho between -1.17 and -0.28 dB, i.e. the RAR does not win anywhere on this grid, mainly through bandwidth and then noise.
