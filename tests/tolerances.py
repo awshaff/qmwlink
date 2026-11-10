@@ -47,3 +47,16 @@ RTOL_RQ1_IDENTITY = 1e-12  # FR-SVC-E2 (e): P_out / P_out^surr = 1/Z
 # --- M6: runner, E1/E2 -----------------------------------------------------------------------
 ABS_F_GENERAL_DEGENERATE = 3e-8  # Q-12: general nu_- form has ~2 sqrt(eps) abs error at nu_+ ~ nu_-
 RTOL_LAW_LIMIT = 1e-6  # FR-CH-3 (b): laws agree as sigma_Psi -> 0
+
+# --- M7: Rydberg receiver physics (TSD §14.11) -------------------------------------------------
+RTOL_TLIN1 = 1e-4  # T-LIN-1: cold 3-level full vs continued fraction
+ATOL_TLIN2_EIG = 1e-12  # T-LIN-2: eigenvalues >= -1e-12, trace and Hermiticity
+RTOL_TLIN3 = 1e-4  # T-LIN-3: two-level limit
+RTOL_TLIN4_SPLIT = 0.03  # T-LIN-4: cold AT splitting ~ Omega_m
+RTOL_TLIN5_SPLIT = 0.02  # T-LIN-5: Doppler-averaged AT splitting ~ (lambda_c/lambda_p) Omega_m
+RTOL_TLIN6_FD = 1e-6  # T-LIN-6: H(0) vs central finite difference
+RTOL_TLIN7 = 2e-4  # T-LIN-7: weak-probe vs full transfer function
+RTOL_TLIN9_QUTIP = 1e-8  # T-LIN-9: full vs QuTiP
+RTOL_TLIN10 = 1e-4  # T-LIN-10: resonant cross-section 3 lambda^2 / (2 pi)
+RTOL_B3DB_DENSE = 1e-3  # FR-LIN-5 AC: refined bandwidth vs dense-grid scan
+REL_SIGMA_V_RB87 = 5e-4  # TSD §14.6: 169.4 m/s (4 s.f.)

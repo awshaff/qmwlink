@@ -92,9 +92,56 @@ numerical Legendre transform (derived).
 
 Numbers produced by the default configs (not gated; inputs in TSD §16, design choices tagged [A]):
 
-- **E1** (5 GHz sweep, $\eta_\ell=1$): removed mass $1-\mathcal Z_K$ between 0.32 and 0.49 for $\bar\eta_s\in[0.9,1]$;
-  the untruncated surrogate understates the outage by $\Delta P_{\rm out}$ = 0.32–0.46 there. Over the E3 link the
-  ratio $P_{\rm out}/P_{\rm out}^{\rm surr}$ is 1.5–1.9 inside the geometric reach and tends to 1 beyond it.
+- **E1** (5 GHz sweep, $\eta_\ell=1$): removed mass $1-\mathcal Z_K$ between 0.21 ($K=100$, $\bar\eta_s=0.9$) and 0.49
+  ($K=100$, $\bar\eta_s\to1$) for $\bar\eta_s\in[0.9,1]$; the untruncated surrogate understates the outage by
+  $\Delta P_{\rm out}$ = 0.21–0.48 there. Over the E3 link (30 and 100 GHz) the ratio $P_{\rm out}/P_{\rm out}^{\rm surr}$ is
+  1.2–1.9 while $\eta_{\rm geo}>0.99$ and tends to 1 well beyond the geometric reach.
 - **E2** (30 GHz, 50 m, $K=10$): at the sourced ratio $\sigma_\Psi/\bar\Psi\approx2$, $\Delta P_{\rm out}$ = +3.1e-4 (V0
   log-normal, 31 % of its mass at $\eta_\ell>1$, 0.11 % clipped) and +3.0e-3 (conditioned log-normal);
   $|\Delta\bar C/\bar C|\le0.3$ % for $C_\chi$, $C_{\rm het}$ and the RAR $C_{\rm rx}$.
+
+## 8. Rydberg receiver physics model (M7)
+
+| Quantity | Value | Source | Test |
+|---|---|---|---|
+| $\Gamma_2$ (⁸⁷Rb D2) | $2\pi\times6.0666$ MHz | lit. Steck, *Rubidium 87 D Line Data*, rev. 2.3 (TSD §14.3) | `unit/test_rydberg_physics.py` |
+| ⁸⁷Rb mass | 86.909180520 u | lit. Steck, rev. 2.3 | same (via $\sigma_v$) |
+| $\sigma_v$ (⁸⁷Rb, 300 K) | 169.4 m/s (code: 169.41) | TSD §14.6 | same |
+| Cycling-transition dipole $d_{12}$ | $\sqrt{3\pi\epsilon_0\hbar\Gamma_2/k_p^3}$ = 2.989 $ea_0$ | TSD §14.7, derived | same |
+| Two-level resonant cross-section | $3\lambda_p^2/2\pi$ (weak probe: 1e-14; full: 1e-4) | TSD §14.7, T-LIN-10 | `validation/test_lindblad.py` |
+| Cold 4-level AT splitting, $\Omega_m/2\pi=4$ MHz | 3.93 MHz (within 3 % of 4) | TSD §14.11, T-LIN-4 | same |
+| Doppler-averaged AT splitting, $\Omega_m/2\pi=20$ MHz | 12.45 MHz vs $(\lambda_c/\lambda_p)\Omega_m$ = 12.30 (1.2 %, tol 2 %; TSD measured 12.4) | TSD §14.11, T-LIN-5 | same |
+| Weak-probe vs full, cold 3-level, $\Omega_p/\Gamma_2=2\times10^{-3}$ | ≤ 1.6e-5 (tol 1e-4) | T-LIN-1, derived | same |
+| Weak-probe vs full $H(i\omega)$, $\Omega_p/2\pi=0.01$ MHz | ≤ 1.5e-4 at $v=0$ (tol 2e-4; TSD states ≤ 8e-5, see QUESTIONS Q-18), ≤ 1e-8 at 100 m/s | TSD §14.4, T-LIN-7 | same |
+| $H(0)$ vs central finite difference | < 1e-6, both engines | T-LIN-6, derived | same |
+| Full engine vs QuTiP 5.3.1 `steadystate` (20 random sets) | rtol 1e-8 | T-LIN-9; run once in a separate environment, skipped when QuTiP is absent | same |
+| Synthetic linear range, $P=kx\mp bx^3$ | $c=1\mp(3b/4k)s^2$, 1 dB point exact to 1e-8, cases `compression` / `expansion` | derived | `unit/test_rydberg_physics.py` |
+| $B_{3\rm dB}$ refinement vs dense scan (60 001 points) | 1e-3 relative | FSD FR-LIN-5 | same |
+| $\kappa$ vs finite difference of $P_{\rm out}(E_{\rm LO}\pm\delta E)$ | 1e-6 relative | derived | same |
+
+**E9 with the placeholder inputs of `configs/e9.yaml`** (all [A], QUESTIONS Q-17; not results): method `auto` stays on
+the weak-probe engine (max weak-probe/full discrepancy 0.53 % at 5 checkpoints, tolerance 1 %); baseline
+($\Omega_p,\Omega_c,\Omega_{\rm LO}=2\pi\times(0.084, 5, 20)$ MHz) gives $S_E=1.2\times10^{-4}$ V m⁻¹ Hz⁻¹ᐟ² rms,
+$B_{3\rm dB}=19.2$ MHz with peaking 3.9, $E_{1\rm dB,pk}=0.85$ V/m (compression) against $E_{\rm LO,pk}=1.33$ V/m; the best
+sweep point is $3.2\times10^{-6}$ V m⁻¹ Hz⁻¹ᐟ² at $\Omega_c/2\pi=10$ MHz, $\Omega_{\rm LO}/2\pi=5$ MHz. The §14.8
+cross-check against a published photon-shot-noise-limited sensitivity is not done (needs sourced experiment parameters).
+
+### Receiver engine benchmarks (FR-LIN-2, FR-LIN-3; recorded, not CI-gated)
+
+<!-- BENCH:START -->
+| Engine | $N_v$ | Cost per velocity class | Target (not gated) | Met |
+|---|---|---|---|---|
+| Weak-probe closed form (`weak_probe.rho21`) | $10^4$ | 12.7 ns | ≤ 50 ns | yes |
+| Full Lindblad, batched `solve` (`lindblad.steady_state`) | $10^3$ | 4.75 µs | ≤ 20 µs | yes |
+
+Measured with `make bench` on x86_64 / Linux, Python 3.12.13, NumPy 2.5.4; best of 5 repetitions.
+<!-- BENCH:END -->
+
+### Experiment wall times (`make paper-figs`, one process, idle laptop-class machine)
+
+| E1 | E2 | E3 | E4 | E5 | E6 | E7 | E8 | E9 | Total |
+|---|---|---|---|---|---|---|---|---|---|
+| 93 s | 50 s | **325 s** | 0.7 s | 207 s | 0.8 s | 1.7 s | 53 s | 12.5 s | 12 min 25 s |
+
+E3 exceeds the 5-minute budget of NFR-3 (profile and options in QUESTIONS Q-22). E9 uses the weak-probe engine; a
+strong-probe configuration that `auto` escalates to the full engine is much slower (QUESTIONS Q-19).

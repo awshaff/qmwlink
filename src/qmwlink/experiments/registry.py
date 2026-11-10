@@ -8,7 +8,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from qmwlink.experiments import e1, e2, e3, e4, e5, e6, e7, e8, schema
+from qmwlink.experiments import e1, e2, e3, e4, e5, e6, e7, e8, e9, schema
 
 
 @dataclass(frozen=True)
@@ -43,10 +43,12 @@ _SPECS = (
                    "Diversity hardening and N_req"),
     ExperimentSpec("e8", "e8_outage_capacity", schema.E8Config, e8.run,
                    "Outage capacity"),
+    ExperimentSpec("e9", "e9_rar_validity", schema.E9Config, e9.run,
+                   "Validity of the Gaussian RAR model and model-derived points"),
 )  # fmt: skip
 
 EXPERIMENTS: dict[str, ExperimentSpec] = {s.exp_id: s for s in _SPECS}
-"""Keyed by short id (``e1`` ... ``e8``; ``e9`` is added by M7)."""
+"""Keyed by short id (``e1`` ... ``e9``)."""
 
 _BY_NAME = {s.name: s for s in _SPECS}
 

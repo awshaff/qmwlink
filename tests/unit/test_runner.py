@@ -18,7 +18,7 @@ from qmwlink.io.export import paper_figs
 from qmwlink.io.literature import load_literature
 
 ROOT = Path(__file__).resolve().parents[2]
-N_EXP = 8
+N_EXP = 9
 
 
 def _e6(tmp_path: Path, **over: Any) -> Path:

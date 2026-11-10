@@ -266,3 +266,18 @@ def test_special_helper_validation() -> None:
     np.testing.assert_allclose(
         gamma_lower_regularized(4.0, u) + gamma_upper_regularized(4.0, u), 1.0, atol=1e-14
     )
+
+
+def test_pdf_at_zero_is_the_finite_limit_for_one_element() -> None:
+    """N = 1: f(0+) = (K+1) exp(-K) / (eta_bar Z); scipy's ncx2.pdf gives 0 at exactly x = 0."""
+    from qmwlink.numerics.special import ncx2_pdf
+
+    for k in (0.0, 1.0, 10.0):
+        s = SmallScale(k, 0.999)
+        limit = (k + 1.0) * np.exp(-k) / (0.999 * s.z)
+        got = s.pdf(np.array([0.0, 1e-13]))
+        assert got[0] == pytest.approx(limit, rel=1e-12)
+        assert got[1] == pytest.approx(got[0], rel=1e-9)  # continuous at 0
+        assert float(ncx2_pdf(0.0, 2.0, 2.0 * k)) == pytest.approx(0.5 * np.exp(-k), rel=1e-12)
+    assert float(ncx2_pdf(0.0, 4.0, 3.0)) == 0.0  # nu > 2: the density vanishes at 0
+    assert float(SmallScale(1.0, 0.5, n_elements=3).pdf(0.0)) == 0.0

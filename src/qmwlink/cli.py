@@ -1,7 +1,7 @@
 """``qmw`` command line. (FR-EXP-2,4, TSD §12)
 
 ``qmw run configs/e3.yaml [--force]``, ``qmw list``, ``qmw figs``, ``qmw paper-figs``,
-``qmw tables``.
+``qmw tables``, ``qmw bench``.
 """
 
 from __future__ import annotations
@@ -33,6 +33,9 @@ def _parser() -> argparse.ArgumentParser:
     tab = sub.add_parser("tables", help="write the LaTeX tables")
     tab.add_argument("--out", default="results/paper/tables")
     tab.add_argument("--configs", default="configs")
+    bench = sub.add_parser("bench", help="per-velocity-class cost of both receiver engines")
+    bench.add_argument("--results-md", default="docs/RESULTS.md")
+    bench.add_argument("--no-write", action="store_true", help="print only")
     return ap
 
 
@@ -69,6 +72,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 literature_path=cfg_dir / "literature_rar.yaml",
             ):  # fmt: skip
                 print(p)
+        else:
+            from qmwlink.receivers.rydberg_physics.bench import run_bench
+
+            print(run_bench(None if args.no_write else args.results_md))
     except ConfigError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

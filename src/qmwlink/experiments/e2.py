@@ -187,7 +187,7 @@ def _figure(rows: list[E2Row]) -> Figure:
                      label=r"$P(\eta_\ell>1)$")  # fmt: skip
     axes[2].semilogy(x, [max(r.clipped_mass, 1e-300) for r in v0], color=OKABE_ITO[1], ls="--",
                      label=r"clipped, $P(\eta>1)$")  # fmt: skip
-    axes[2].set_ylim(bottom=1e-12)
+    axes[2].set_ylim(1e-12, 2.0)
     axes[0].set_ylabel(r"$\Delta P_{\rm out}$")
     axes[1].set_ylabel(r"$\Delta\bar C/\bar C$")
     axes[2].set_ylabel("V0 mass above 1")

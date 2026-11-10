@@ -28,7 +28,7 @@ paper-figs:
 	$(QMW) paper-figs
 
 bench:
-	@echo "target 'bench' is not implemented yet (milestone M7)"; exit 1
+	$(QMW) bench
 
 clean:
 	rm -rf .pytest_cache .mypy_cache .ruff_cache .coverage htmlcov

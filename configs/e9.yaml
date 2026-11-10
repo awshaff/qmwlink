@@ -1,0 +1,58 @@
+experiment: e9_rar_validity
+seed: 20261028
+environment: {T_env_k: 300.0}
+# Receiver physics model (TSD §14). Values tagged [A] are illustrative placeholders, not measurements:
+# they exercise the model end to end and must be replaced with sourced numbers before any E9 number is
+# quoted (QUESTIONS Q-17). The optical Rabi frequencies, gamma_t and the 480 nm coupling wavelength
+# repeat the TSD §14.11 test case 2 pi x (0.05-0.1, 5, 20, 0.1) MHz.
+lindblad:
+  method: auto               # auto | weak_probe | full (§14.6)
+  weak_probe_tol: 0.01
+  species: Rb87
+  n_levels: 4
+  T_vapor_k: 300.0
+  n0_per_m3: 1.0e16          # [A] placeholder number density
+  cell_length_m: 0.05        # [A] placeholder
+  probe:
+    wavelength_m: 780.241e-9
+    power_w: 1.0e-8          # [A] placeholder; with the waist below Omega_p / 2 pi = 0.084 MHz (weak probe)
+    waist_m: 1.0e-3          # [A] placeholder
+    d12_cm: null             # null -> closed cycling-transition dipole sqrt(3 pi eps0 hbar Gamma_2 / k_p^3) (TSD §14.7)
+  coupling:
+    wavelength_m: 480.0e-9   # TSD §14.11 (T-LIN-5 case)
+    omega_c_over_2pi_mhz: 5.0   # given directly; alternatively power_w, waist_m and d23_cm
+  mw:
+    f_hz: 5.0e9              # [A] placeholder carrier of the |3>-|4> transition (sets N_amp and the E6 overlay)
+    d34_cm: 1.0e-26          # [A] placeholder Rydberg-Rydberg transition dipole (about 1.2e3 e a0)
+    e_lo_pk_v_per_m: 1.3252  # [A] placeholder LO peak field; with d34 above Omega_LO / 2 pi = 20 MHz
+  decays:
+    - {from: 3, to: 2, rate_per_s: 6283.0, source: "[A] placeholder Rydberg decay, 2 pi x 1 kHz"}
+    - {from: 4, to: 1, rate_per_s: 6283.0, source: "[A] placeholder Rydberg decay, 2 pi x 1 kHz (phenomenological cascade to ground, TSD §14.3)"}
+  gamma_t_per_s: 6.2832e5    # 2 pi x 0.1 MHz (TSD §14.11 T-LIN-5 case) [A]
+  detector: {eta_d: 0.9, nep_w_per_rthz: 0.0}   # [A] placeholder quantum efficiency; photon-shot-noise limited
+  doppler: {n_sigma: 5, n_v_start: 4097, rtol: 1.0e-5, n_v_max: 1048577}
+  sweep:
+    omega_c_over_2pi_mhz: [1, 2, 3, 5, 7, 10, 15, 20]
+    e_lo_pk_v_per_m: [0.33, 0.66, 1.3252, 2.65]   # Omega_LO / 2 pi = 5, 10, 20, 40 MHz with the placeholder d34
+  sources:
+    vapor: "[A] placeholder density and cell length; 87Rb mass from Steck, Rubidium 87 D Line Data, rev. 2.3"
+    probe: "Steck, Rubidium 87 D Line Data, rev. 2.3 (wavelength, Gamma_2); [A] placeholder power and waist"
+    coupling: "TSD §14.11 test case (480 nm, 2 pi x 5 MHz) [A]"
+    mw: "[A] placeholder carrier, dipole and LO field"
+    transit: "TSD §14.11 test case (2 pi x 0.1 MHz) [A]"
+    detector: "[A] placeholder"
+# Panel (a): received peak field E_rx,pk = sqrt(2 eta0 P_rx / A_r) over distance against E_1dB,pk (TSD §7.4).
+link:
+  P_t_w: 0.2                 # [A] design choice (23 dBm), as in E5
+  A_t_m2: 2.0                # [A] design choice (TSD §16.6)
+  A_r_m2: 2.0                # [A]
+  coupling_model: goubau
+  gamma_abs_per_m: 1.524e-6
+  gamma_abs_source: "ITU-R P.676-12 Annex 1 (via itur 0.4.0), O2 only, 5 GHz, 1013.25 hPa, 300 K"
+  distance_m: {start: 10, stop: 1.0e5, num: 81, scale: log}
+# Panel (c): the E6 crossover map with the model-derived points overlaid.
+crossover:
+  f_ghz: {start: 1, stop: 300, num: 60, scale: log}
+  delta_db: [1.0, 3.0]
+  eta_ref: 0.0
+  literature_rar: configs/literature_rar.yaml
