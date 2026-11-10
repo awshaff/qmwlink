@@ -269,6 +269,20 @@ class E6Config(_Strict):
     slope_fit_max_ghz: float = 30.0
 
 
+class E7Config(_Strict):
+    experiment: Literal["e7_diversity"]
+    environment: Environment
+    bands_ghz: list[float]
+    K: list[float]
+    eps: list[float]
+    eta_l: Literal[1] = 1
+    """Deterministic large-scale factor of the reference table (``eta_l = 1``)."""
+    eta_bar_fraction: float = Field(default=0.9, gt=0, lt=1)
+    """``eta_bar_Sigma = eta* + fraction (1 - eta*)`` (FSD FR-DIV-3 reference rule)."""
+    n_grid: GridSpec
+    """``N`` grid (log, integers) for the outage-vs-N curves."""
+
+
 class E8Config(_Strict):
     experiment: Literal["e8_outage_capacity"]
     seed: int
