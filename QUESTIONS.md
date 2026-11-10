@@ -89,3 +89,22 @@
 - Options: A) document the limit (K <= 1e9 for the sf upper tail); B) add a normal-approximation guard.
 - Recommendation: A for now; no configured experiment uses K above 100.
 - Status: open
+
+## Q-10 [non-blocking] "Smallest N_amp" in the capacity-based crossover (TSD §8.3)
+- Context: `services/crossover.py::crossover_capacity`, FR-SVC-C4.
+- Observation: TSD §8.3 says "smallest N_amp with C_rx >= (1-delta) C_het". C_rx is non-increasing in N_amp, so every
+  N_amp down to 1/2 satisfies the constraint and "smallest" is trivially 1/2 (ssb) or infeasible (dsb). The meaningful
+  quantity is the largest tolerable N_amp, which is what the dB-penalty closed form also returns.
+- Options: A) largest N_amp with C_rx >= (1-delta) C_het (implemented); B) literal "smallest" (trivial).
+- Recommendation: A; please confirm and fix the TSD wording.
+- Status: open
+
+## Q-11 [non-blocking] E5/E6/E8 placeholder inputs
+- Context: `configs/e5.yaml`, `configs/e8.yaml`, `configs/literature_rar.yaml`, FR-SVC-C5 (d), FR-EXP-7.
+- Observation: all per-band RAR (S_E, B) and LNA (T_n, B) values, P_t, N_s and the E8 receivers are `[A]` illustrative
+  placeholders with `source: "[A] placeholder"`; `literature_rar.yaml` is empty (E6 renders without the overlay and warns).
+  With the placeholder bandwidths (RAR 1 MHz, LNA 100 MHz) the E5 map is bandwidth-limited everywhere (rho about -19 dB,
+  no rho = 0 contour); this reflects the inputs, not a result. Same absorption/aperture/stochastic-loss placeholders as Q-7.
+- Options: A) supply sourced RAR/LNA values and literature points; B) keep placeholders and quote nothing absolute.
+- Recommendation: A, by Abdurrahman, together with Q-7.
+- Status: open

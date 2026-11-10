@@ -70,3 +70,22 @@
   10.5 min -> 3 min by caching the frozen ncx2) closed.
 - V0's closed-form outage expressions are not in the repo; Cases 1-3 under the V0 log-normal were derived from first principles
   (Phi/clamped-cdf quadrature), not copied from V0.
+
+## M4 — Classical service, crossover, E5/E6/E8 (FR-SVC-C1..C5)
+- Built: `services/classical.py` (cancellation-free `g_entropy`, Holevo / heterodyne / homodyne / measuring-receiver capacities,
+  `ClassicalService`: ergodic by nested quadrature, `C_eps`, rate outage via `brentq`, throughput, `N_s = P_t/(h f B)`),
+  `services/crossover.py` (closed-form and numeric required `S_E`/`N_amp` for a dB penalty, DSB image floor with NaN + reason,
+  capacity-based variant), `services/throughput_map.py` (log-log band interpolation with masking, `rho = 10 log10(R_RAR/R_LNA)`),
+  `experiments/{e5,e6,e8,rx_cfg}.py`, schemas `E5Config`/`E6Config`/`E8Config`/`RxSpec`/`BandRx`, `load_literature`
+  (FR-EXP-7), `configs/{e5,e6,e8,literature_rar}.yaml`; entry point extended to `{e3|e4|e5|e6|e8}`.
+- References reproduced (5 GHz, 300 K, eta -> 0): ssb 3 dB ratio 0.99823 (N_amp 1245.27); dsb 4 dB 0.71659 (641.71), dsb 6 dB 1.40849;
+  dsb 3 dB NaN naming the 3.009 dB floor; floors 3.009/3.000/2.976/2.907 dB at 5/30/100/300 GHz. Closed form vs brentq to 1e-6.
+  E6 RJ slope of S_E,BBR = 0.9997 (fit f <= 30 GHz).
+- Properties tested: C_chi >= C_het, C_hom; all increasing in eta and -> 0 as eta -> 0; C_rx non-increasing in N_amp, = C_het at
+  ssb/N_amp = 1/2, dsb <= ssb; C_eps = C(F^-1(eps)) to 1e-6 and rate-outage round trip; ergodic vs MC; power-limited rho asymptote;
+  equal-bandwidth rho <= 0; masking outside the band range; missing `source`/`field_convention` fails validation.
+- Fix found while testing: `g(x)` as `(x+1)log2(x+1) - x log2 x` cancels at large x (Holevo < homodyne by 2e-12 at n_th = 1250);
+  now `log2(1+x) + x log2(1+1/x)`.
+- Tests:  total (all tiers, ~100 s), coverage 99%; ruff + mypy --strict clean.
+- Runtime: E6 under 1 s, E8 34 s, E5 1 min 48 s (8 x 8 x 3 map).
+- Open findings: Q-10 ("smallest N_amp" wording), Q-11 (E5/E6/E8 placeholder inputs); Q-7, Q-8, Q-9 unchanged.

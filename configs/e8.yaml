@@ -1,0 +1,21 @@
+experiment: e8_outage_capacity
+seed: 20261028
+environment: {T_env_k: 300.0}
+band_ghz: 5
+n_s: 1.0e4          # [A] photons per mode (placeholder)
+distance_m: [50, 200]
+eps: {start: 1.0e-4, stop: 1.0e-1, num: 13, scale: log}
+small_scale: {K: [0, 10]}
+large_scale:
+  model: loggamma
+  gamma_abs_per_m: {5: 1.44e-6}
+  gamma_abs_source: {5: "Gonzalez-Raya et al., PRApplied 18, 044002 (2022)"}
+  stochastic: {mean: 1.0e-3, std: 5.0e-4}   # [A] placeholder (Q-7)
+link_budget: {coupling_model: goubau, A_t_m2: 2.0, A_r_m2: 2.0, G_enh: 1.0, sensitivity_models: [goubau]}
+receivers:
+  - {label: "Holevo", kind: holevo}
+  - {label: "ideal het", kind: het}
+  - {label: "ideal hom", kind: hom}
+  # [A] illustrative placeholders, not literature values (Q-7)
+  - {label: "LNA", kind: electronic, t_n_k: 50.0, tn_convention: rj, sideband: ssb, source: "[A] placeholder"}
+  - {label: "RAR", kind: rydberg, s_e: 2.0e-7, field_convention: rms, sideband: dsb, source: "[A] placeholder"}

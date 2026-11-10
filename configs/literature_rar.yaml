@@ -1,0 +1,4 @@
+# Literature RAR points for the E6/E9(c) overlay (FR-EXP-7). Each entry REQUIRES
+# source, field_convention (rms|peak) and sideband (ssb|dsb); includes_bbr optional.
+# Empty on purpose: no values are entered without a verified citation (QUESTIONS Q-7).
+entries: []
