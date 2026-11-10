@@ -120,3 +120,22 @@
   MRC sum-sampling vs array cdf (MC-agree, N = 1e6); sum vs per-element two-sample KS (N = 8); SC exact tail vs per-element MC; N > 64 error.
 - Found while testing: the Legendre oracle needed a wide search interval (optimal s is far below 0 for K = 100, a = 0.2); oracle fixed, closed form unchanged.
 - Tests: 392 total (all tiers), coverage 99%; ruff + mypy --strict clean. E7 runs in 3 s.
+
+## M6 — Runner, cache, CLI, LaTeX export, E1, E2, obstacle generator (FR-EXP-1..6, FR-CH-4)
+- Built: `experiments/registry.py` (E1-E8; E9 joins in M7), `experiments/runner.py` (schema validation with a clear
+  message naming file and field, results cache keyed by config hash plus a hash of external input files, `meta.json`
+  completed with seed, wall time, package versions), `cli.py` (`qmw run|list|figs|paper-figs|tables`, also
+  `python -m qmwlink.cli`), `io/latex.py` (booktabs parameter / thermal / N_req / literature tables), `io/export.py`
+  (`paper_figs`: force-run, copy PDF/PNG/CSV/meta to `results/paper/<experiment>/`, tables to `results/paper/tables/`),
+  `io/literature.py`, `channel/obstacles.py` (compound-Poisson generator, exact moment match, diagnostic histogram),
+  `experiments/e1.py` (pdf vs untruncated surrogate, removed mass, Delta P_out and ratio vs eta_s_bar and vs distance),
+  `experiments/e2.py` (three laws matched on Psi moments, Delta P_out, Delta C/C for Holevo / heterodyne / RAR, V0
+  clip with both masses), `configs/{e1,e2,defaults}.yaml`, `docs/RESULTS.md`. Makefile: `exp ID=E<n> [FORCE=1]`, `figs`,
+  `paper-figs`.
+- Fixed: `test_property_fidelity_opt_ge_bk` was failing on `main` at r ~ 5e-9 (round-off of the general nu_- form,
+  Q-12); the property now uses the closed form at the frozen slack and the general form with a documented allowance.
+- Validation: second run is a cache hit, `--force` and a changed literature file recompute; unknown keys rejected;
+  tables compile in IEEEtran (pdflatex, skipped when absent); E1 identity P_out/P_out^surr = 1/Z to 1e-12; E2 laws agree
+  as sigma_Psi -> 0 (rtol 1e-6), V0 mass above 1 = Phi(-1), clipped mass vs MC; obstacle moments and atom vs MC.
+- Tests: 422 total (all tiers, ~200 s), coverage 99.0%; ruff + mypy --strict clean. E1 runs in 92 s, E2 in 49 s.
+- Open: Q-12 (finding), Q-13..Q-16 (non-blocking). `scripts/derive_inputs.py` not written (Q-16).

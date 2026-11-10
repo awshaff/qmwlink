@@ -1,0 +1,33 @@
+experiment: e1_truncation
+environment: {T_env_k: 300.0}
+K: [0, 1, 10, 100]
+# Sweep of the small-scale scale parameter (deterministic eta_l = 1): removed mass 1 - Z_K and the
+# truncated-vs-untruncated outage pair (RQ1; FSD §6 E1, TSD §8.1).
+eta_s_bar: {start: 0.9, stop: 1.0, num: 41, scale: lin}
+band_ghz: 5                  # sets eta* = 0.99920 in the eta_s_bar sweep
+pdf_eta_s_bar: 0.999         # pdf panel (the Z_K reference point of TSD §6.1)
+pdf_eta: {start: 0.0, stop: 1.2, num: 241, scale: lin}   # beyond 1 to show the removed surrogate mass
+# Compound panel: the E3 link (same sourced inputs as configs/e3.yaml) over the E3 distance grid.
+compound:
+  bands_ghz: [30, 100]
+  distance_m: {start: 10, stop: 1000, num: 60, scale: log}
+  large_scale:
+    model: loggamma
+    psi0_from_absorption: true
+    # Deterministic part Psi0 = gamma_abs * d: O2 specific attenuation, ITU-R P.676-12 Annex 1, 1013.25 hPa, 300 K (TSD §16.1).
+    gamma_abs_per_m: {5: 1.524e-6, 30: 4.394e-6, 100: 6.641e-6, 300: 5.088e-6}
+    gamma_abs_source: "ITU-R P.676-12 Annex 1 (via itur 0.4.0), O2 only, 1013.25 hPa, 300 K"
+    # Stochastic part G (water vapour + rain), KHU Seoul, annual statistics, fully correlated path (TSD §6.2, §16.2).
+    # mu_G = mean * d, sigma_G = std * d, so k = mean^2/std^2 is distance-independent.
+    stochastic_per_m:
+      5:   {mean: 4.160e-7, std: 9.028e-7}
+      30:  {mean: 2.839e-5, std: 6.760e-5}
+      100: {mean: 1.509e-4, std: 2.049e-4}
+      300: {mean: 1.523e-3, std: 1.101e-3}
+    stochastic_source: "ITU-R P.836 + P.676-12 (vapour), P.837-7 + P.838-3 (rain), annual, KHU Seoul 37.597N 127.052E"
+  link_budget:
+    coupling_model: goubau
+    A_t_m2: 2.0      # [A] design choice (TSD §16.6): about a 2.0 m dish at e_a = 0.65
+    A_r_m2: 2.0      # [A] antenna-fed receiver. Geometric reach before absorption: 12.5 / 87 / 328 / 1144 m
+    G_enh: 1.0       # receive side only; keep 1 when A_r is an antenna aperture (§6.5)
+    sensitivity_models: [goubau]
