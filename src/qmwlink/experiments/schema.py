@@ -1,4 +1,4 @@
-"""Pydantic config schemas for E3-E6 and E8 (TSD §12). Extended by the M6 runner."""
+"""Pydantic config schemas for E1-E9 (FR-EXP-1, TSD §12). Unknown keys are rejected."""
 
 from __future__ import annotations
 
@@ -304,6 +304,75 @@ class E8Config(_Strict):
         if any(r.kind in ("electronic", "rydberg") for r in self.receivers):
             raise ValueError("E8 receivers: ideal kinds only; LNA/RAR come from rar/lna")
         return self
+
+
+class E1Compound(_Strict):
+    """Compound panel of E1: the E3 link over a distance grid (FSD §6, E1)."""
+
+    bands_ghz: list[float] = Field(min_length=1)
+    distance_m: GridSpec
+    large_scale: LargeScale
+    link_budget: LinkBudgetCfg
+
+    @model_validator(mode="after")
+    def _bands_have_absorption(self) -> E1Compound:
+        for b in self.bands_ghz:
+            if b not in self.large_scale.gamma_abs_per_m:
+                raise ValueError(f"no gamma_abs entry for band {b} GHz")
+        return self
+
+
+class E1Config(_Strict):
+    """E1: small-scale PDT shape and truncation effect (RQ1; FR-CH-1, FR-SVC-E2)."""
+
+    experiment: Literal["e1_truncation"]
+    environment: Environment
+    K: list[float] = Field(min_length=1)
+    eta_s_bar: GridSpec
+    """Scale-parameter sweep for the removed-mass and outage panels (``0 < eta_s_bar <= 1``)."""
+    band_ghz: float = Field(gt=0)
+    """Band that sets ``eta*`` in the ``eta_s_bar`` sweep (deterministic ``eta_l = 1``)."""
+    pdf_eta_s_bar: float = Field(gt=0, le=1)
+    pdf_eta: GridSpec
+    compound: E1Compound
+
+
+class LawComparison(_Strict):
+    """RQ2 comparison block (TSD §6.2, §12)."""
+
+    match: Literal["psi_moments"] = "psi_moments"
+    eta_gt1: Literal["clip"] = "clip"
+    sigma_ratio: list[float] = Field(min_length=1)
+    """Grid of ``sigma_Psi / Psi_bar`` (all ``> 0``)."""
+
+    @model_validator(mode="after")
+    def _positive(self) -> LawComparison:
+        if any(r <= 0 for r in self.sigma_ratio):
+            raise ValueError("sigma_ratio entries must be > 0")
+        return self
+
+
+class E2Config(_Strict):
+    """E2: large-scale law comparison (RQ2; FR-CH-3).
+
+    ``Psi_0`` and ``mu_G`` come from ``large_scale`` at ``(band_ghz, distance_m)``; the configured
+    ``std`` only marks the sourced ratio in the figure, the sweep is ``law_comparison.sigma_ratio``.
+    """
+
+    experiment: Literal["e2_law_comparison"]
+    environment: Environment
+    band_ghz: float = Field(gt=0)
+    distance_m: float = Field(gt=0)
+    K: float = Field(ge=0)
+    n_s: float = Field(gt=0)
+    large_scale: LargeScale
+    link_budget: LinkBudgetCfg
+    source_state: SourceState
+    law_comparison: LawComparison
+    rar: RarCfg
+    pdf_sigma_ratio: float = Field(gt=0)
+    """``sigma_Psi/Psi_bar`` of the pdf panel."""
+    pdf_eta: GridSpec
 
 
 class LiteratureEntry(_Strict):

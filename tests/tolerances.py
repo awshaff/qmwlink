@@ -43,3 +43,7 @@ ATOL_ETA_STAR_RX_REF = 5e-6  # FR-SVC-E1: 0.99960 (5 s.f.), 0.999219 (6 s.f.)
 RTOL_ETA_STAR_ROOT = 1e-12  # FR-SVC-E1: closed form vs root-finding (additive noise)
 RTOL_P_OUT_QUAD = 1e-8  # FR-SVC-E2 (c): Cases 2-3 vs quadrature of the clamped cdf
 RTOL_RQ1_IDENTITY = 1e-12  # FR-SVC-E2 (e): P_out / P_out^surr = 1/Z
+
+# --- M6: runner, E1/E2 -----------------------------------------------------------------------
+ABS_F_GENERAL_DEGENERATE = 3e-8  # Q-12: general nu_- form has ~2 sqrt(eps) abs error at nu_+ ~ nu_-
+RTOL_LAW_LIMIT = 1e-6  # FR-CH-3 (b): laws agree as sigma_Psi -> 0

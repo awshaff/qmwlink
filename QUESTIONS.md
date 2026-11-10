@@ -108,3 +108,61 @@
 - Options: A) supply sourced RAR/LNA values and literature points; B) keep placeholders and quote nothing absolute.
 - Recommendation: A, by Abdurrahman, together with Q-7.
 - Status: closed 2026-11-10: sourced RAR / LNA / bandwidth / P_t inputs in TSD §16.3-16.4 and configs/literature_q7_q11.yaml; E5 adds the equal-bandwidth case
+
+## Q-12 [finding] General nu_- formula has ~sqrt(eps) absolute error when nu_+ ~ nu_- (r -> 0)
+- Context: `gaussian/entanglement.py::nu_minus_general`, FR-GAU-4 (c), TSD §5.2; `tests/validation/test_entanglement.py::test_property_fidelity_opt_ge_bk`.
+- Observation: `hypothesis` found r = 5.3e-9, eta = 0.875, n_th = 0, n_JPA = 0, where the general form gives
+  F_opt = 0.5000000018626 < F_BK = 0.5000000024779 (relative 1.2e-9, above the 1e-9 slack of the test). Against a
+  40-digit reference the general form is off by +2.5e-9 in nu_-; the standard-form closed form is exact to 1e-16.
+  Cause: `Delta^2 - 4 det V = ((a-b)^2 + 4c'^2)(a+b)^2` is formed by subtraction of two numbers near 4 whose
+  difference (1.6e-15) is at round-off, so the square root carries an absolute error of about sqrt(eps) ~ 1e-8.
+  The cancellation-free numerator of TSD §5.2 does not remove this second cancellation. The failure was on `main`
+  (stored in the local hypothesis database), so `make test` was red before M6.
+- Options: A) keep the general form for tests only (as the TSD already says) and check the property with the
+  closed form at the frozen 1e-9 plus the general form with an absolute allowance; B) restrict the property to
+  r >= 1e-3; C) amend TSD §5.2 with a discriminant computed from the blocks.
+- Recommendation: A (implemented). New frozen tolerance `ABS_F_GENERAL_DEGENERATE = 3e-8` in `tests/tolerances.py`;
+  the 1e-9 slack is unchanged and now applies to the production (closed-form) path. No production code changed:
+  every service uses the closed form. FR-GAU-4 (a) (rtol 1e-10 on random CMs) still passes.
+- Status: open
+
+## Q-13 [non-blocking] Meaning of "clip" for the V0 log-normal (eta_l vs total eta) and which mass to report
+- Context: `experiments/e2.py`, FR-CH-3, TSD §6.2 ("evaluate the service at min(eta, 1) ... report the affected mass");
+  `LogNormalV0.sample_eta_clipped` (M2).
+- Observation: TSD/FSD clip the total eta = eta_l eta_s; the M2 helper clips eta_l and reports P(eta_l > 1). These differ:
+  clipping the total leaves P_out untouched (min(eta,1) <= eta* < 1 iff eta <= eta*) and affects only the mass
+  P(eta_l eta_s > 1), which is far smaller than P(eta_l > 1) (E2 at sigma/Psi_bar = 1: 2.4e-4 vs 0.159).
+- Options: A) total-eta clip per the TSD, report both masses; B) clip eta_l (changes P_out and inflates the clip effect).
+- Recommendation: A (implemented in E2: columns `clipped_mass` = P(eta > 1) and `mass_eta_l_above_one`).
+  `sample_eta_clipped` is left as is (used only by its own M2 test); say if it should be removed or redefined.
+- Status: open
+
+## Q-14 [non-blocking] `configs/defaults.yaml` is a parameter table, not a merge layer
+- Context: FSD §6 ("Default parameter sets live in configs/defaults.yaml"), FR-EXP-4, FR-EXP-5.
+- Observation: M3-M5 configs are self-contained, and the cache is keyed by the hash of the experiment file. Merging a
+  defaults file into every config would make results depend on a second file that the hash does not cover.
+- Options: A) `defaults.yaml` lists the shared parameters with sources, feeds the LaTeX parameter table, and a test
+  checks it against `e3.yaml`/`e5.yaml`; B) implement merging and hash the merged config.
+- Recommendation: A (implemented). The runner also hashes external input files (`literature_rar.yaml`) into the
+  cache check (`inputs_hash` in `meta.json`), which FR-EXP-4 does not ask for but a stale overlay would otherwise survive.
+- Status: open
+
+## Q-15 [non-blocking] E1/E2 design choices not fixed by the spec
+- Context: `configs/e1.yaml`, `configs/e2.yaml`, FSD §6 (E1, E2), TSD §12.
+- Observation: the spec gives the sweeps but not: E1's band for eta* in the eta_s_bar sweep (5 GHz used), the compound
+  bands (30 and 100 GHz; 5 GHz is in outage beyond 12.5 m), the pdf point (eta_s_bar = 0.999); E2's operating point
+  (30 GHz, 50 m, K = 10, N_s = 1e4, 2 m^2 apertures) and sigma_Psi/Psi_bar grid (0.05-3; the sourced Seoul value is 2.06).
+  E2's RAR is the log-log interpolated literature point at 30 GHz, as in E8.
+- Options: A) keep; B) other operating points.
+- Recommendation: A until Abdurrahman picks the paper's points; all are config values, no code change needed.
+- Status: open
+
+## Q-16 [non-blocking] `scripts/derive_inputs.py` (TSD §1, §16.2) is still missing
+- Context: TSD §16.2 ("must reproduce both tables to 3 significant figures"), optional dependency `itur` 0.4.0.
+- Observation: `itur` is not installed and is not a pinned dependency; the quantile integration (0.1-99 % vapour,
+  0.001 %-P0 rain) leaves the quadrature rule and the P.836 quantile set open, so a script written now could not be
+  checked against the tables. The §16.1-16.2 values in the configs are the ones compiled by Abdurrahman.
+- Options: A) Abdurrahman supplies the script used for §16; B) I write it once `itur` may be installed and the
+  integration rule is stated.
+- Recommendation: A. Not needed for `make paper-figs` (the configs carry the numbers with `source:`).
+- Status: open

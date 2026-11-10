@@ -261,8 +261,20 @@ def test_fidelity_opt_ge_bk_grid_and_equality_when_symmetric() -> None:
 
 @given(r=st.floats(0.0, 3.0), eta=st.floats(0.0, 1.0), nb=st.floats(0.0, 1e3), nj=st.floats(0, 1))
 def test_property_fidelity_opt_ge_bk(r: float, eta: float, nb: float, nj: float) -> None:
-    v = apply_to_mode_b(tmst_cm(r, nj), PIChannel.thermal_attenuator(eta, nb))
-    assert float(fidelity_opt(nu_minus_general(v))) >= float(fidelity_bk(v)) * (1 - 1e-9)
+    ch = PIChannel.thermal_attenuator(eta, nb)
+    v = apply_to_mode_b(tmst_cm(r, nj), ch)
+    a, c = (float(x) for x in two_mode_ac(r, nj))
+    nu = nu_minus_standard(
+        a, float(ch.tau_arr) * a + float(ch.y_arr), np.sqrt(float(ch.tau_arr)) * c
+    )
+    # Production path (standard-form closed form): the frozen 1e-9 slack.
+    assert float(fidelity_opt(nu)) >= float(fidelity_bk(v)) * (1 - 1e-9)
+    # General form: its discriminant cancels when nu_+ ~ nu_- (r -> 0), leaving an O(sqrt(eps))
+    # absolute error in nu_- (QUESTIONS Q-12), so it is checked with that absolute allowance.
+    assert (
+        float(fidelity_opt(nu_minus_general(v)))
+        >= float(fidelity_bk(v)) - tol.ABS_F_GENERAL_DEGENERATE
+    )
 
 
 def test_fidelity_bk_shape_error_and_is_entangled_domain() -> None:

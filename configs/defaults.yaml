@@ -1,0 +1,32 @@
+# Default parameter set of the paper (FSD §6): the single list behind the LaTeX parameter table
+# (FR-EXP-5, `qmw tables`). Experiment configs stay self-contained (their hash identifies a run);
+# tests/unit/test_runner.py checks that the values below agree with configs/e3.yaml and e5.yaml.
+# Every literature number carries `source:`; design choices and assumptions are tagged [A].
+parameters:
+  - {key: T_env_k, symbol: "$T$", description: "Environment temperature", value: 300.0, unit: "K",
+     source: "[A] design choice (room temperature)"}
+  - {key: bands_ghz, symbol: "$f$", description: "Carrier frequencies", value: [5, 30, 100, 300], unit: "GHz",
+     source: "[A] design choice"}
+  - {key: A_t_m2, symbol: "$A_t$", description: "Transmit aperture", value: 2.0, unit: "m$^2$",
+     source: "[A] design choice (TSD 16.6): about a 2.0 m dish at aperture efficiency 0.65"}
+  - {key: A_r_m2, symbol: "$A_r$", description: "Receive aperture (antenna-fed)", value: 2.0, unit: "m$^2$",
+     source: "[A] design choice (TSD 16.6)"}
+  - {key: coupling_model, symbol: "--", description: "Geometric coupling model", value: goubau, unit: "--",
+     source: "Goubau and Schwering, IRE Trans. Antennas Propag. (1961)"}
+  - {key: gamma_abs_per_m, symbol: "$\\gamma_{\\rm abs}$", description: "O$_2$ absorption (5/30/100/300 GHz)",
+     value: [1.524e-6, 4.394e-6, 6.641e-6, 5.088e-6], unit: "m$^{-1}$",
+     source: "ITU-R P.676-12 Annex 1, 1013.25 hPa, 300 K (itur 0.4.0)"}
+  - {key: stochastic_mean_per_m, symbol: "$m_1$", description: "Weather loss mean per metre (5/30/100/300 GHz)",
+     value: [4.160e-7, 2.839e-5, 1.509e-4, 1.523e-3], unit: "m$^{-1}$",
+     source: "ITU-R P.836, P.676-12, P.837-7, P.838-3, annual, KHU Seoul (37.597 N, 127.052 E)"}
+  - {key: stochastic_std_per_m, symbol: "$s_1$", description: "Weather loss std per metre (5/30/100/300 GHz)",
+     value: [9.028e-7, 6.760e-5, 2.049e-4, 1.101e-3], unit: "m$^{-1}$",
+     source: "ITU-R P.836, P.676-12, P.837-7, P.838-3, annual, KHU Seoul (37.597 N, 127.052 E)"}
+  - {key: K, symbol: "$K$", description: "Rician factor", value: [0, 10, 100], unit: "--",
+     source: "[A] sweep values"}
+  - {key: r, symbol: "$r$", description: "TMSV squeezing parameter", value: 1.0, unit: "--",
+     source: "[A] design choice"}
+  - {key: P_t_w, symbol: "$P_t$", description: "Transmit power", value: 0.2, unit: "W",
+     source: "[A] design choice (23 dBm, 3GPP power class 3)"}
+  - {key: mc_samples, symbol: "--", description: "Monte Carlo samples (validation)", value: 1000000, unit: "--",
+     source: "FSD 4.3"}
