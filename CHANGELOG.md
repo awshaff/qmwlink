@@ -86,6 +86,6 @@
   equal-bandwidth rho <= 0; masking outside the band range; missing `source`/`field_convention` fails validation.
 - Fix found while testing: `g(x)` as `(x+1)log2(x+1) - x log2 x` cancels at large x (Holevo < homodyne by 2e-12 at n_th = 1250);
   now `log2(1+x) + x log2(1+1/x)`.
-- Tests:  total (all tiers, ~100 s), coverage 99%; ruff + mypy --strict clean.
+- Tests: 361 total (all tiers, ~100 s), coverage 99%; ruff + mypy --strict clean.
 - Runtime: E6 under 1 s, E8 34 s, E5 1 min 48 s (8 x 8 x 3 map).
 - Open findings: Q-10 ("smallest N_amp" wording), Q-11 (E5/E6/E8 placeholder inputs); Q-7, Q-8, Q-9 unchanged.
