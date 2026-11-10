@@ -1,0 +1,10 @@
+experiment: e4_receiver_window
+environment: {T_env_k: 300.0}
+bands_ghz: [5, 30, 100, 300]
+n_add: {start: 0.0, stop: 1.2, num: 121, scale: lin}
+# Front-end classes: attenuator (eta_t, n_t) then additive noise N_add (swept).
+# eta_t = 1 is the pure additive-noise front end. The transducer rows are [A] placeholders.
+classes:
+  - {label: "additive noise", eta_t: 1.0, n_t: 0.0, source: "analytic reference (TSD §8.1)"}
+  - {label: "transducer, eta_t=0.8", eta_t: 0.8, n_t: 0.01, source: "[A] placeholder (TSD §8.1 example family)"}
+  - {label: "transducer, eta_t=0.6", eta_t: 0.6, n_t: 0.01, source: "[A] placeholder (TSD §8.1 example)"}

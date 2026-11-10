@@ -52,3 +52,40 @@
 - Options: A) mask nan as 0; B) integrate only over mean +/- 20 sd and raise on any non-finite value.
 - Recommendation: B (implemented); neglected mass < 1e-80.
 - Status: closed (resolved by TSD v0.4.1 / FSD v0.6.1; implemented in M2 revision)
+
+## Q-6 [finding] E3 exceeded the 5-minute budget (NFR-3); profile and fix
+- Context: `experiments/e3.py` with `configs/e3.yaml` (4 bands x 2 coupling models x 60 distances x 3 K = 1440 points), FSD NFR-3, NFR-7.
+- Observation: first full run took 10 min 30 s. cProfile on 48 points: 30.3 s, of which 19.6 s (65%) was
+  `scipy.stats.ncx2(...)` frozen-distribution construction (0.6 ms x 33 366 calls inside the compound quadrature, via
+  `numerics/special._frozen`); the actual cdf/sf evaluations were a minor share.
+- Options: A) cache the frozen distribution per `(nu, lam)`; B) vectorize the compound quadrature; C) reduce the grid.
+- Recommendation: A (implemented, `functools.lru_cache`): 6.5 s for the same 48 points (4.7x), full E3 now 3 min 2 s.
+  No algorithm, tolerance or grid changed; no compiled code.
+- Status: closed (A implemented; E3 now within budget, see CHANGELOG M3)
+
+## Q-7 [non-blocking] E3/E4 placeholder inputs
+- Context: `configs/e3.yaml`, `configs/e4.yaml`, TSD §12 ("placeholders carry [A]").
+- Observation: only the 5 GHz clear-air absorption (1.44e-6 /m, Gonzalez-Raya et al. 2022) has a verified source. The 30/100/300 GHz
+  entries are set to 0.0 (no absorption) and flagged `[A]` in the config and in `meta.json`. The large-scale stochastic loss
+  (mean 1e-3, std 5e-4), the apertures (2 m^2) and the E4 transducer classes (eta_t 0.8/0.6, n_t 0.01) are also placeholders.
+- Options: A) supply ITU-R P.676 values with sources; B) keep zeros and restrict claims to 5 GHz.
+- Recommendation: A, by Abdurrahman. Until then E3 absolute numbers above 5 GHz are optimistic and must not be quoted.
+- Status: open
+
+## Q-8 [non-blocking] Meaning of E[nu~_-], E[F_opt], E[F_BK] in FR-SVC-E2
+- Context: `services/entanglement.py::EntanglementService.metrics`, TSD §8.1 ("E[nu~_-], E[F_opt], E[F_BK] likewise").
+- Observation: E[E_N] = int_{eta*}^1 E_N f d eta is unambiguous (E_N = 0 below eta*). For nu~_- and the fidelities the
+  integrand does not vanish below eta*, so "likewise" can mean the restricted integral or the full mean.
+- Options: A) restricted to eta > eta* (entangled realizations), divide by 1 - P_out for the conditional mean;
+  B) full mean over all eta.
+- Recommendation: A (implemented, matches the literal formula and keeps the integration domain finite); the full mean is
+  a one-line extension if wanted.
+- Status: open
+
+## Q-9 [finding] scipy `ncx2.sf` warns and may be unreliable for nc >~ 1e10
+- Context: `numerics/special.ncx2_sf`, FR-CH-1, K -> infinity limit tests (FR-SVC-E2 Case 1).
+- Observation: at N = 1, K = 1e10 (nc = 2e10) `ncx2.sf` 8 sd above the mean raises "Series did not converge" (a RuntimeWarning);
+  the cdf in the bulk and lower tail matched Phi to 4 digits at K up to 1e10. Tests use K = 1e9, which is warning-free.
+- Options: A) document the limit (K <= 1e9 for the sf upper tail); B) add a normal-approximation guard.
+- Recommendation: A for now; no configured experiment uses K above 100.
+- Status: open

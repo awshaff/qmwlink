@@ -1,0 +1,25 @@
+experiment: e3_entanglement_outage
+seed: 20261028
+environment: {T_env_k: 300.0}
+bands_ghz: [5, 30, 100, 300]
+distance_m: {start: 10, stop: 1000, num: 60, scale: log}
+small_scale: {K: [0, 10, 100]}
+large_scale:
+  model: loggamma
+  # Per-band clear-air power absorption [1/m]. Only 5 GHz has a verified literature value.
+  # The other bands are [A] PLACEHOLDERS (0.0 = no absorption) until ITU-R P.676 values with
+  # sources are supplied (QUESTIONS Q-7). Do not quote their absolute numbers.
+  gamma_abs_per_m: {5: 1.44e-6, 30: 0.0, 100: 0.0, 300: 0.0}
+  gamma_abs_source:
+    5: "Gonzalez-Raya et al., PRApplied 18, 044002 (2022)"
+    30: "[A] placeholder, no absorption (ITU-R P.676 value to be supplied)"
+    100: "[A] placeholder, no absorption (ITU-R P.676 value to be supplied)"
+    300: "[A] placeholder, no absorption (ITU-R P.676 value to be supplied)"
+  stochastic: {mean: 1.0e-3, std: 5.0e-4}   # [A] placeholder, Abdurrahman to set
+link_budget:
+  coupling_model: goubau
+  A_t_m2: 2.0      # [A] near-field apertures (TSD §12)
+  A_r_m2: 2.0      # [A] antenna-fed receiver aperture, not a bare cell
+  G_enh: 1.0       # receive side only; keep 1 when A_r is an antenna aperture (§6.5)
+  sensitivity_models: [goubau, friis_clipped]
+source_state: {type: tmsv, r: 1.0}

@@ -76,6 +76,31 @@ class CompoundPDT:
 
         return _vectorize(one, x)
 
+    def cdf_surrogate(self, x: ArrayLike) -> FloatArray:
+        """RQ1 only, NON-PHYSICAL: the cdf with the untruncated surrogate in place of ``F_s``.
+
+        ``F^surr(x) = P(eta_l <= x) + int_{eta_l > x} F_surr(x e^Psi) f_Psi dPsi`` (TSD §8.1).
+        For a deterministic large-scale factor with ``x/eta_l < 1`` it equals ``Z * F(x)``.
+        """
+
+        def one(v: float) -> float:
+            if v <= 0.0:
+                return 0.0
+            if (psi := self._deterministic()) is not None:
+                return (
+                    1.0 if v >= np.exp(-psi) else float(self.small.surrogate_cdf(v * np.exp(psi)))
+                )
+            head = float(self.large.cdf(v))
+            body = self._integrate(
+                lambda p: (
+                    float(self.small.surrogate_cdf(v * np.exp(p))) * float(self.large.psi_pdf(p))
+                ),
+                v,
+            )
+            return min(head + body, 1.0)
+
+        return _vectorize(one, x)
+
     def sf(self, x: ArrayLike) -> FloatArray:
         """``P(eta > x)``; computed directly when it is the smaller tail."""
 

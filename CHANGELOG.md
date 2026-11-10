@@ -52,3 +52,21 @@
 - `large_scale`: `matched_laws` (RQ2 moment matching), `LogNormalV0.sample_eta_clipped` (`eta_gt1: clip`, returns the mass).
 - Tests: 245 total (all tiers, ~200 s), coverage 99.9%; ruff + mypy --strict clean; mpmath reference extended to N = 1e8 (K = 0).
 - Deferred to M3 (needs the service layer): FR-SVC-E2 RQ1 outage identity, FR-CH-3 (b) in terms of P_out / ergodic capacity.
+
+## M3 — Receivers, entanglement service, E3/E4 (FR-RX-1..5, FR-SVC-E1,2)
+- Built: `receivers/` (`MeasuringReceiver` with required sideband, `ideal_heterodyne`, `IdealHomodyne`, quantum-limited amplifier,
+  `electronic_receiver` with required `tn_convention`, `RydbergReceiver` with required `field_convention` and no aperture argument
+  in the `S_E -> N_amp` mapping, `coherent_transducer`), `services/entanglement.py` (closed-form `eta_star_rx` / `window_rx`,
+  numeric TMSV/TMST threshold, `EntanglementService`: `P_out`, E[E_N], E[nu~_-], E[F_opt], E[F_BK], RQ1 `truncation_effect`),
+  `CompoundPDT.cdf_surrogate`, `experiments/{schema,common,e3,e4}.py`, `plotting/style.py`, `configs/e3.yaml`, `configs/e4.yaml`
+  (temporary entry point `python -m qmwlink.experiments {e3|e4} <config>`; the cached runner and `qmw` CLI stay in M6).
+- References reproduced: N_amp = 3.438e5 / 1.719e5, T_n = 8.25e4 K; T_n conventions 0.9102 / 0.5000 / 1.0000; eta*_rx = 0.99960
+  (N_add = 1/2) and 0.999219 (transducer); closed form vs direct root of nu~_- = 1 to 1e-12.
+- Validation: V0 and log-gamma limiting cases 1-4 (clamp active), RQ1 identity P_out/P_out^surr = 1/Z to 1e-12, MC agreement
+  (Bonferroni rule) for the outage and all four metrics.
+- Tests: 304 total (all tiers, ~145 s), coverage 99.3%; ruff + mypy --strict clean. E3 full run 3 min 2 s (NFR-3 ok), E4 3 s.
+  Figures: E3 `fig_p_out`, `fig_p_ent` (1 - P_out, log), `fig_e_n`; E4 `fig` (written to `results/`, gitignored).
+- Open findings: Q-7 (placeholder inputs), Q-8 (E[nu~_-], E[F] definition), Q-9 (scipy ncx2.sf at nc >~ 1e10). Q-6 (E3 runtime,
+  10.5 min -> 3 min by caching the frozen ncx2) closed.
+- V0's closed-form outage expressions are not in the repo; Cases 1-3 under the V0 log-normal were derived from first principles
+  (Phi/clamped-cdf quadrature), not copied from V0.
