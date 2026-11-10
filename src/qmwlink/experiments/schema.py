@@ -375,6 +375,131 @@ class E2Config(_Strict):
     pdf_eta: GridSpec
 
 
+class BeamCfg(_Strict):
+    """Probe or coupling beam (TSD §12 ``lindblad`` block). Dipoles in C m, fields peak."""
+
+    wavelength_m: float = Field(gt=0)
+    power_w: float | None = Field(default=None, gt=0)
+    waist_m: float | None = Field(default=None, gt=0)
+    d12_cm: float | None = Field(default=None, gt=0)
+    """Probe only. ``null`` uses the closed cycling-transition dipole of TSD §14.7."""
+    d23_cm: float | None = Field(default=None, gt=0)
+    omega_c_over_2pi_mhz: float | None = Field(default=None, ge=0)
+    """Coupling only: Rabi frequency given directly instead of power, waist and ``d23_cm``."""
+
+
+class MwCfg(_Strict):
+    f_hz: float = Field(gt=0)
+    """Carrier of the ``|3> <-> |4>`` transition; needed by the §7.4 ``N_amp`` mapping."""
+    d34_cm: float = Field(gt=0)
+    e_lo_pk_v_per_m: float = Field(gt=0)
+
+
+class DecayCfg(_Strict):
+    """One decay channel; ``from``/``to`` are level numbers starting at 1 (TSD §14.3)."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    from_level: int = Field(alias="from", ge=2, le=4)
+    to_level: int = Field(alias="to", ge=1, le=3)
+    rate_per_s: float = Field(ge=0)
+    source: str
+
+    @model_validator(mode="after")
+    def _has_source(self) -> DecayCfg:
+        if not self.source.strip():
+            raise ValueError("decay entries need a non-empty source")
+        return self
+
+
+class DetectorCfg(_Strict):
+    eta_d: float = Field(gt=0, le=1)
+    nep_w_per_rthz: float = Field(default=0.0, ge=0)
+
+
+class DopplerCfg(_Strict):
+    n_sigma: float = Field(default=5.0, gt=0)
+    n_v_start: int = Field(default=4097, ge=3)
+    rtol: float = Field(default=1.0e-5, gt=0, lt=1)
+    n_v_max: int = Field(default=1048577, ge=3)
+
+
+class LindbladSweep(_Strict):
+    omega_c_over_2pi_mhz: list[float] = Field(min_length=1)
+    e_lo_pk_v_per_m: list[float] = Field(min_length=1)
+
+
+LINDBLAD_SOURCE_KEYS = ("vapor", "probe", "coupling", "mw", "transit", "detector")
+
+
+class LindbladCfg(_Strict):
+    """Receiver physics model inputs (TSD §12, §14). Every block needs an entry in ``sources``."""
+
+    method: Literal["auto", "weak_probe", "full"] = "auto"
+    weak_probe_tol: float = Field(default=0.01, gt=0, lt=1)
+    species: Literal["Rb87"] = "Rb87"
+    n_levels: Literal[4] = 4
+    """The receiver figures need the microwave transition; 3-level schemes are library-only."""
+    T_vapor_k: float = Field(gt=0)
+    n0_per_m3: float = Field(gt=0)
+    cell_length_m: float = Field(gt=0)
+    probe: BeamCfg
+    coupling: BeamCfg
+    mw: MwCfg
+    decays: list[DecayCfg]
+    """Rydberg decay channels; ``2 -> 1`` defaults to the 87Rb D2 rate when not listed."""
+    gamma_t_per_s: float = Field(ge=0)
+    detector: DetectorCfg
+    doppler: DopplerCfg = DopplerCfg()
+    sweep: LindbladSweep
+    sources: dict[str, str]
+
+    @model_validator(mode="after")
+    def _complete(self) -> LindbladCfg:
+        missing = [k for k in LINDBLAD_SOURCE_KEYS if not self.sources.get(k, "").strip()]
+        if missing:
+            raise ValueError(f"lindblad.sources missing for {missing}")
+        if self.probe.power_w is None or self.probe.waist_m is None:
+            raise ValueError("probe needs power_w and waist_m")
+        c = self.coupling
+        beam = c.power_w is not None and c.waist_m is not None and c.d23_cm is not None
+        if c.omega_c_over_2pi_mhz is None and not beam:
+            raise ValueError("coupling needs omega_c_over_2pi_mhz, or power_w, waist_m and d23_cm")
+        return self
+
+
+class E9Link(_Strict):
+    """Link of panel (a): received peak field vs distance (TSD §7.4)."""
+
+    P_t_w: float = Field(gt=0)
+    A_t_m2: float = Field(gt=0)
+    A_r_m2: float = Field(gt=0)
+    coupling_model: Literal["goubau", "friis_clipped"] = "goubau"
+    gamma_abs_per_m: float = Field(ge=0)
+    gamma_abs_source: str
+    distance_m: GridSpec
+
+
+class E9Crossover(_Strict):
+    """E6 map behind the model-derived points of panel (c)."""
+
+    f_ghz: GridSpec
+    delta_db: list[float]
+    eta_ref: float = Field(default=0.0, ge=0.0, le=1.0)
+    literature_rar: str = "configs/literature_rar.yaml"
+
+
+class E9Config(_Strict):
+    """E9: validity of the Gaussian RAR model and model-derived points (FR-RX-6, FR-LIN)."""
+
+    experiment: Literal["e9_rar_validity"]
+    seed: int
+    environment: Environment
+    lindblad: LindbladCfg
+    link: E9Link
+    crossover: E9Crossover
+
+
 class LiteratureEntry(_Strict):
     """Published RAR point (FR-EXP-7, TSD §12, §16.3). Units: ``f_hz`` Hz, ``s_e`` V/m/sqrt(Hz)."""
 

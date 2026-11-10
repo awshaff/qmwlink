@@ -139,3 +139,31 @@
   as sigma_Psi -> 0 (rtol 1e-6), V0 mass above 1 = Phi(-1), clipped mass vs MC; obstacle moments and atom vs MC.
 - Tests: 422 total (all tiers, ~200 s), coverage 99.0%; ruff + mypy --strict clean. E1 runs in 92 s, E2 in 49 s.
 - Open: Q-12 (finding), Q-13..Q-16 (non-blocking). `scripts/derive_inputs.py` not written (Q-16).
+
+## M7 — Rydberg receiver physics model and E9 (FR-RX-6, FR-LIN-1..7)
+- Built: `receivers/rydberg_physics/` per TSD §14.10: `scheme.py` (3/4-level ladder, decay channels with the 4 -> 1
+  default, transit reset, dephasing, coherence rates), `weak_probe.py` (closed-form tridiagonal steady state, dynamics,
+  transfer function, broadcast over velocity), `lindblad.py` (Liouvillian as A + vB, batched bordered steady state and
+  transfer function; written independently of the weak-probe engine), `doppler.py` (Maxwell-Boltzmann grid, doubling loop
+  with recorded N_v), `response.py` (B_3dB by log scan + `brentq`, refined peaking), `readout.py` (alpha, P_out, kappa,
+  S_P, rms S_E, first-harmonic compression and E_1dB with the compression/expansion case), `model.py`
+  (`RARParams`, `LindbladRARModel`, `evaluate_sweep` with `auto | weak_probe | full` and checkpoint discrepancy),
+  `bench.py`; `RydbergReceiver.from_physics` (rms, `dsb`, B_3dB, peak E_1dB); `experiments/e9.py`, `E9Config`,
+  `configs/e9.yaml`; `qmw bench` / `make bench`; E9 registered, so `make paper-figs` covers E1-E9.
+- Validation: T-LIN-1..8 and 10..12 pass in CI; T-LIN-9 (QuTiP) skips cleanly and passed once against QuTiP 5.3.1 in a
+  separate environment. Also: Omega_p^2 scaling of the weak-probe error, reset-map identity of the transit operators,
+  Liouvillian vs direct master-equation right-hand side, kappa vs a finite difference of P_out, B_3dB vs a dense scan (1e-3),
+  synthetic compression and expansion cases with exact 1 dB points, sub-quantum-limit S_E raises.
+- Benchmarks (recorded in `docs/RESULTS.md`, not gated): weak probe 12.7 ns per velocity class at N_v = 1e4 (target 50 ns),
+  full engine 4.75 us at N_v = 1e3 (target 20 us).
+- Found while testing: the continued fraction is 0/0 for ideal EIT and for Omega_c = 0; it is evaluated in the cleared
+  form with an explicit two-level branch. A 3-level scheme with an undamped, uncoupled level has no unique full steady
+  state (the solver raises, as it should).
+- Also fixed: `ncx2_pdf` now returns the finite limit exp(-lambda/2)/2 at x = 0 for 2 degrees of freedom (scipy gives 0
+  there, Q-21); it only affected the first point of the E1 pdf curve.
+- `make paper-figs` regenerates E1-E9 and the LaTeX tables in 12 min 25 s. E3 takes 325 s, above the 5-minute budget
+  of NFR-3 (profile in Q-22); every other figure is inside it.
+- Tests: 489 total (488 passed, 1 skipped), ~230 s, coverage 99.2%; ruff + mypy --strict clean. E9 runs in 13 s.
+- Open: Q-17 (E9 inputs are placeholders, schema additions), Q-18 (finding: T-LIN-1/7 margins depend on unstated rates),
+  Q-19 (finding: full-engine B_3dB / E_1dB cost), Q-20 (linear-range and bandwidth conventions), Q-21 (finding: scipy
+  pdf at 0), Q-22 (finding: E3 runtime). No question is marked blocking.

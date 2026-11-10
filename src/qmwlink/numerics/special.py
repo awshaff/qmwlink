@@ -46,8 +46,17 @@ def ncx2_sf(x: ArrayLike, nu: float, lam: float) -> FloatArray:
 
 
 def ncx2_pdf(x: ArrayLike, nu: float, lam: float) -> FloatArray:
-    """Noncentral chi-square pdf through the floor path (may be ``nan`` far from the mean)."""
-    return np.asarray(_frozen(nu, lam).pdf(x), dtype=np.float64)
+    """Noncentral chi-square pdf through the floor path (may be ``nan`` far from the mean).
+
+    For ``nu = 2`` the density at ``x = 0`` is the finite limit ``exp(-lam/2)/2`` (only the central
+    ``chi^2_2`` term of the Poisson mixture is non-zero there); scipy returns 0 at that single
+    point (QUESTIONS Q-21), so it is set explicitly.
+    """
+    xx = np.asarray(x, dtype=np.float64)
+    out = np.asarray(_frozen(nu, lam).pdf(xx), dtype=np.float64)
+    if nu == 2.0:
+        out = np.asarray(np.where(xx == 0.0, 0.5 * np.exp(-0.5 * lam), out), dtype=np.float64)
+    return out
 
 
 def ncx2_ppf(q: ArrayLike, nu: float, lam: float) -> FloatArray:

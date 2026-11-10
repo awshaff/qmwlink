@@ -193,8 +193,6 @@ def test_rx4_alternative_constructors_and_roundtrip() -> None:
     assert rx.s_e_rms == pytest.approx(S_E_10NV, rel=1e-12)
     via_t = RydbergReceiver.from_noise_temperature(rx.t_n_k, F5)
     assert via_t.n_amp == pytest.approx(rx.n_amp, rel=1e-12)
-    with pytest.raises(NotImplementedError, match="M7"):
-        RydbergReceiver.from_physics()
 
 
 # ---- FR-RX-5 ---------------------------------------------------------------------------------

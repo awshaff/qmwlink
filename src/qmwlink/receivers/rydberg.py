@@ -8,13 +8,17 @@ mapping therefore accepts no aperture argument.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 
 from qmwlink.constants import ETA0, K_B, H
 from qmwlink.receivers.base import N_AMP_MIN, MeasuringReceiver, Sideband, check_sideband
 from qmwlink.thermal import effective_aperture_m2, s_e_bbr
+
+if TYPE_CHECKING:
+    from qmwlink.receivers.rydberg_physics.doppler import DopplerSettings
+    from qmwlink.receivers.rydberg_physics.model import RARParams
 
 FieldConvention = Literal["rms", "peak"]
 
@@ -109,9 +113,32 @@ class RydbergReceiver(MeasuringReceiver):
         )
 
     @classmethod
-    def from_physics(cls, *args: object, **kwargs: object) -> RydbergReceiver:
-        """Model-derived receiver (FR-RX-6, TSD §14); implemented in milestone M7."""
-        raise NotImplementedError("RydbergReceiver.from_physics is part of milestone M7")
+    def from_physics(
+        cls,
+        params: RARParams,
+        *,
+        engine: Literal["weak_probe", "full"] = "weak_probe",
+        doppler: DopplerSettings | None = None,
+        linear_range: bool = True,
+    ) -> RydbergReceiver:
+        """Model-derived receiver: ``S_E``, ``B_3dB`` and ``E_1dB`` from TSD §14. (FR-RX-6)
+
+        ``S_E`` from the model is rms and intrinsic (photon shot noise and detector NEP only), the
+        readout is envelope-sensitive, hence ``field_convention="rms"`` and ``sideband="dsb"``;
+        ``E_1dB`` is a peak field (``None`` when the model finds no 1 dB point below the LO).
+        """
+        from qmwlink.receivers.rydberg_physics.model import LindbladRARModel
+
+        res = LindbladRARModel(params, doppler).evaluate(engine, linear_range=linear_range)
+        e_1db = res.e_1db_pk_v_per_m if np.isfinite(res.e_1db_pk_v_per_m) else None
+        return cls.from_sensitivity(
+            res.s_e_rms,
+            params.f_mw_hz,
+            field_convention="rms",
+            sideband="dsb",
+            bandwidth_hz=res.b_3db_hz,
+            e_1db_pk_v_per_m=e_1db,
+        )
 
     @property
     def t_n_k(self) -> float:
