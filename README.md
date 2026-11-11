@@ -15,8 +15,10 @@ phase-insensitive Gaussian channel or an input-referred added noise. The Rydberg
 
 ## Status
 
-Milestones M0–M7 are complete: all experiments E1–E9 run and the test suite is green. Some results are not yet
-quotable; see [Known limitations](#known-limitations).
+Milestones M0–M7 are complete: all experiments E1–E9 run and the test suite is green.
+
+The code implements FSD v0.6.3 / TSD v0.4.3. The specifications are now at FSD v0.6.5 / TSD v0.4.5, and those changes
+are not implemented yet, so some results are not quotable; see [Known limitations](#known-limitations).
 
 ## Install
 
@@ -104,14 +106,19 @@ docs/                        specifications and reference values
 
 ## Known limitations
 
-Details are in `QUESTIONS.md`.
+The specifications decide each of these; the code has not caught up. Details are in `QUESTIONS.md` and the
+changelogs of `docs/FSD.md` and `docs/TSD.md`.
 
-- **E9 numbers are not quotable.** The atomic and optical inputs in `configs/e9.yaml` are placeholders until sourced
-  values are supplied (Q-17).
-- **Bandwidth and received-field conventions are undecided** (Q-20); both affect what E5 and E9 report.
-- **E1 and E2 operating points are provisional** (Q-15).
-- **E3 takes about 325 s**, above the 5-minute per-figure budget (Q-22).
-- **The full Lindblad engine is slow for strong-probe sweeps** (Q-19).
+- **E9 numbers are not quotable.** `configs/e9.yaml` still carries placeholder atomic and optical inputs; the sourced
+  values are in TSD §16.8 (Q-17).
+- **E5 still uses a fixed 0.2 W transmit power**, which the TSD withdraws in favour of a received-power axis (TSD §8.4).
+- **Bandwidth and linear range use the old conventions.** The TSD now specifies the ±3 dB flatness bandwidth and the
+  field at the atoms (Q-20); both affect what E5 and E9 report.
+- **Weather inputs in the configs are the earlier hand-computed values**, which differ from the
+  `scripts/derive_inputs.py` output in the fourth significant figure (TSD §16.2).
+- **E1 and E2 operating points are not yet config values** (Q-15).
+- **E3 takes about 325 s**, above the 5-minute per-figure budget; the fix is specified in TSD §6.4 (Q-22).
+- **The full Lindblad engine is slow for strong-probe sweeps**; the rule limiting what it sweeps is in TSD §14.12 (Q-19).
 
 ## Conventions
 
