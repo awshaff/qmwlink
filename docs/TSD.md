@@ -1,6 +1,6 @@
 # TSD — Technical Specification
 
-**Project:** `qmwlink` · **Version:** 0.4.3 (2026-11-10; pairs with FSD v0.6.3; §14 is a pure-Python receiver physics model, no compiled code) · **Owner:** Abdurrahman
+**Project:** `qmwlink` · **Version:** 0.4.5 (2026-11-11; pairs with FSD v0.6.5; §14 is a pure-Python receiver physics model, no compiled code) · **Owner:** Abdurrahman
 **Reads with:** `docs/IDEA.md` (why), `docs/FSD.md` (what). This document is the single source of truth for formulas, algorithms, numerics, code identifiers and code layout. If code and TSD disagree, the code is wrong or the TSD needs a reviewed change; never silently diverge. FSD and TSD versions are bumped together.
 
 Status tags used below:
@@ -138,6 +138,10 @@ V0 eq. (symp_eig), $\tilde\nu_-^2=(\tilde\Delta-\sqrt{\tilde\Delta^2-4\det V})/2
 Standard form $\begin{psmallmatrix}aI&c'Z\\c'Z&bI\end{psmallmatrix}$ closed form, stable version **[V]** (agrees with the general form to 6e-16 relative on 2×10⁴ random CMs):
 $$\tilde\nu_-=\frac{2(ab-c'^2)}{(a+b)+\sqrt{(a-b)^2+4c'^2}}.$$
 Use the closed form when the CM is in standard form (the case for every service in this project); keep the general one for tests. Tolerance between the two: relative 1e-10.
+- **Near-degenerate limit (QUESTIONS Q-12, accepted):** when $\tilde\nu_+\approx\tilde\nu_-$ (e.g. $r\to0$), the discriminant $\tilde\Delta^2-4\det V$ is itself a difference of two numbers near 4 that cancel to round-off, so the general form carries an absolute error of order $\sqrt{\epsilon_{\rm mach}}\approx10^{-8}$ in $\tilde\nu_-$. The cancellation-free numerator does not remove this second cancellation. Consequences:
+  - Production paths use the closed form only (already the rule above).
+  - Property tests that compare quantities built on the general form (e.g. $F_{\rm opt}\ge F_{\rm BK}$) allow an absolute slack `ABS_F_GENERAL_DEGENERATE = 3e-8` (frozen in `tests/tolerances.py`); the same property on the closed form keeps the 1e-9 slack.
+  - FR-GAU-4 (a) (rtol 1e-10 on random CMs) is unchanged.
 
 ### 5.3 Measures
 - $\mathcal N=\max\{0,(1-\tilde\nu_-)/(2\tilde\nu_-)\}$, $E_N=\max\{0,-\log_2\tilde\nu_-\}$.
@@ -167,6 +171,7 @@ Parameters: $K\ge0$, scale $\bar\eta$ ($=\bar\eta_s$ for $N=1$, $=\bar\eta_\Sigm
   - **Why not `chi2`:** `scipy.stats.chi2`, `scipy.stats.gamma`, `special.gammainc` and `ncx2(nc=0)` share one code path that loses accuracy in the lower tail at large shape (cancellation in $a\ln y-y-\ln\Gamma(a+1)$, magnitude ~$10^9$). At $z=-5.5$ sd (cdf ≈ 1.8e-8), relative error is 3e-14 / 1.6e-6 / 2.3e-2 / 0.32 for $N=10^5/10^6/10^7/10^8$; the `ncx2` floor path gives 3e-14 / 2e-13 / 5e-13 / 1.2e-12 **[V]** (scipy 1.18.1; reference: series for $P(a,x)$ with an `mpmath` prefactor; QUESTIONS Q-3).
   - The fix relies on a scipy implementation detail, so it is guarded by the pinned regression test `test_ncx2_floor_tail` (§10): the four points above, both tails, `rtol=1e-6`. A scipy upgrade that fails it blocks the upgrade.
   - Closed forms (truncated exponential for $N=1$, truncated Erlang for small $N$) are test oracles only, at $N\le100$.
+- **pdf at $x=0$ for $\nu=2$ (QUESTIONS Q-21, accepted):** `scipy.stats.ncx2(2, lam).pdf(0.0)` returns 0 (scipy 1.18.1, also with the floor), but the true value is $e^{-\lambda/2}/2$. The helper `ncx2_pdf` sets this value explicitly at $x=0$, $\nu=2$; a continuity test checks `pdf(0)` against `pdf(1e-12)` to rtol 1e-9. For $\nu>2$ the density at 0 is correctly 0. This is a measure-zero point: no cdf, moment, outage or capacity changes.
 - **Very large $\lambda$ (QUESTIONS Q-9, accepted as documented limit):** `ncx2.sf` warns "Series did not converge" in the far upper tail for $\lambda\gtrsim2\times10^{10}$ (e.g. $N=1$, $K=10^{10}$, 8 sd above the mean); the bulk and lower tail still match the normal limit to 4 digits. Supported range for the upper-tail sf: $K\le10^9$. Limit tests for $K\to\infty$ use $K=10^9$; configured experiments use $K\le100$. A `RuntimeWarning` from this path is promoted to an error in tests, so a silent excursion past the limit fails.
 - **Large $N$ (up to $10^8$):** covered by the same helper and the same regression test; NFR-2 (1% relative down to 1e-8) is the requirement, the regression gate is tighter on purpose.
 - **Samplers.**
@@ -200,7 +205,10 @@ Parameters: $K\ge0$, scale $\bar\eta$ ($=\bar\eta_s$ for $N=1$, $=\bar\eta_\Sigm
 
 **Law comparison (RQ2, E2).**
 - **Matching rule [A]:** all three laws share the first two moments of $\Psi$: $\bar\Psi=\Psi_0+\mu_G$, $\sigma_\Psi=\sigma_G$, with the same $\Psi_0$. (The conditioned log-normal matches only before conditioning; its post-conditioning moments are reported.)
-- **Realizations with $\eta>1$ under the V0 log-normal:** service formulas are undefined there ($N_{\rm out}=(1-\eta)\bar n_{\rm th}<0$). Policy `eta_gt1: clip` (the only one implemented): evaluate the service at $\min(\eta,1)$, set `physical=False`, and report the affected mass next to every number. Together with `friis_clipped` (§6.5), this is one of the two sanctioned exceptions to §13 rule 9, and both exist only inside flagged baselines.
+- **Realizations with $\eta>1$ under the V0 log-normal:** service formulas are undefined there ($N_{\rm out}=(1-\eta)\bar n_{\rm th}<0$). Policy `eta_gt1: clip` (the only one implemented): evaluate the service at $\min(\eta,1)$ of the **total** $\eta=\eta_\ell\eta_s$, set `physical=False`, and report the affected mass next to every number (QUESTIONS Q-13, option A).
+  - Report both masses: `clipped_mass` $=P(\eta>1)$ (what the clip touches) and `mass_eta_l_above_one` $=P(\eta_\ell>1)$ (the V0 law's own defect). At $\sigma_\Psi/\bar\Psi=1$ in E2 they are 2.4e-4 and 0.159 **[V by implementer]**.
+  - Since $\eta^\*<1$, clipping the total leaves $P_{\rm out}$ unchanged; outage differences between laws come from their shapes, not from the clip. Capacities are affected only through `clipped_mass`.
+  - Do **not** clip $\eta_\ell$ alone: that changes $P_{\rm out}$ and inflates the effect by ~3 orders of magnitude. The M2 helper `LogNormalV0.sample_eta_clipped` (which does this) is deleted with its test. Together with `friis_clipped` (§6.5), this is one of the two sanctioned exceptions to §13 rule 9, and both exist only inside flagged baselines.
 - **Outputs:** $\Delta P_{\rm out}$ (absolute) and $\Delta\bar C/\bar C$ (relative, for $C_\chi$, $C_{\rm het}$ and the default RAR $C_{\rm rx}$) of each baseline against log-gamma, vs $\sigma_\Psi/\bar\Psi$.
 - **Limit check:** as $\sigma_\Psi\to0$ all three laws give the same $P_{\rm out}$ and $\bar C$ to `rtol=1e-6`.
 
@@ -212,6 +220,9 @@ Moments: $\mu_G=\lambda_od\,k_o\theta_o$, $\sigma_G^2=\lambda_od\,k_o(k_o+1)\the
 $\eta=\eta_\ell\eta_s$, independent. Work in $\Psi$-space, $\eta_\ell=e^{-\Psi}$:
 - cdf: $F(x)=P(\eta_\ell\le x)+\displaystyle\int_{\Psi:\ \eta_\ell>x}F_s\!\big(xe^{\Psi}\big)\,f_\Psi(\Psi)\,d\Psi$.
 - survival: $S(x)=\displaystyle\int_{\Psi:\ \eta_\ell>x}S_s\!\big(xe^{\Psi}\big)\,f_\Psi(\Psi)\,d\Psi$. Use whichever of $F,S$ is smaller as the primary computation.
+  - **Tail selection with one nested integral (QUESTIONS Q-22, option A) [D]:** do not evaluate both tails to find the smaller one. First form a cheap estimate $\hat F(x)$ with a fixed 16-node Gauss–Legendre rule per breakpoint panel (same integrand, same breakpoints). If $\hat F\le\tfrac12$ compute $F$ with `quad`; otherwise compute $S$ with `quad` and set $F=1-S$.
+  - **Guard:** if the accurate tail comes out above 0.9 (the estimate picked the wrong side by a wide margin), recompute the other tail directly and log it. Near $\tfrac12$ either tail is accurate, so no guard is needed there.
+  - Expected gain ≈ 1.4× on E3 (QUESTIONS Q-22 profile). Option B (vectorized Gauss–Legendre outer integral replacing `quad`) is held in reserve; it would change the integration settings below and needs a TSD amendment first.
 - pdf: $f(x)=\displaystyle\int_{\Psi:\ \eta_\ell>x}e^{\Psi}f_s\!\big(xe^{\Psi}\big)f_\Psi(\Psi)\,d\Psi$.
 - Integration settings: `scipy.integrate.quad`, `epsabs=0`, `epsrel=1e-10`, `limit=500`.
   - Breakpoints at $\Psi_0+\mu_G+j\sigma_G$, $j\in\{-6,-3,-1,0,1,3,6\}$, clipped to the domain, and at the kink $\Psi=-\ln x$.
@@ -283,8 +294,9 @@ $$N_{\rm amp}=\frac{S_E^2A_e}{\eta_0hf}.$$
   - The same number declared `peak` → $N_{\rm amp}=1.719\times10^5$.
   - BBR-equivalent sensitivity $S_{E,\rm BBR}(f,T)=\sqrt{\bar n(f,T)hf\eta_0/A_e}$: 0.603 / 3.614 / 12.01 / 35.75 nV/cm/√Hz at 5 / 30 / 100 / 300 GHz, 300 K.
 - **Optional fields:** `bandwidth_hz` and `e_1db_pk_v_per_m` (linear-range limit, a **peak** field, from §14.9 or literature).
-  - The received peak field is $E_{\rm rx,pk}=\sqrt{2\eta_0P_{\rm rx}/A_r}$.
-  - If $E_{\rm rx,pk}>E_{1\rm dB,pk}$, set `linear_regime=False` on results; do not alter numbers.
+  - **Field at the atoms (QUESTIONS Q-20(4), option B) [D]:** the linear-range check uses the peak field **at the atoms**, $E_{\rm atom,pk}=\sqrt{2\eta_0P_{\rm rx}/A_e}$, with $P_{\rm rx}$ the power collected by $A_{r,\rm eff}$ and delivered through the lossless matched feed. For a bare cell ($A_{r,\rm eff}=A_e$) this equals the incident field $\sqrt{2\eta_0P_{\rm rx}/A_r}$; for an antenna-fed or enhanced cell the field at the atoms is larger by $\sqrt{A_{r,\rm eff}/A_e}$ (≈ 68 for 2 m² at 5 GHz). This is the same $\sqrt G$ concentration that leaves $N_{\rm amp}$ unchanged; signal and noise are referred to the atoms the same way. The incident field $E_{\rm inc,pk}=\sqrt{2\eta_0P_{\rm rx}/A_{r,\rm eff}}$ is reported for reference only.
+  - If $E_{\rm atom,pk}>E_{1\rm dB,pk}$ at the mean received power, set `linear_regime=False` on results; do not alter numbers. Under fading also report `frac_nonlinear` $=P\big(\eta>\eta_{\rm sat}\big)$ with $\eta_{\rm sat}=A_eE_{1\rm dB,pk}^2/(2\eta_0P_t)$, from the compound survival function (§6.4).
+  - If no $E_{1\rm dB}$ is available (literature entry without `e_1db_pk_v_per_m` and no `from_physics`), set `linear_regime=None` with reason `"linear range unknown"`; never assume linear.
   - Never compare an rms field with a peak field.
 - **Model-derived alternative:** `RydbergReceiver.from_physics(model_params)` takes $S_E$, $B$ and $E_{1\rm dB}$ from §14 instead of literature inputs.
 - **Aperture/field convention cross-check (resolved 2026-11-10) [V]:** Santamaría Botello et al. (arXiv 2209.00908) relate field and power by $P=G\frac{\lambda^2}{4\pi}\frac{|E|^2}{2\eta_0}$ with $G=3/2$, i.e. a **peak** field and the same $A_e=3\lambda^2/8\pi$ as here. Reading their 1.25 µV/m/√Hz at 10 GHz as peak, the $N_{\rm amp}$ mapping above gives $T=16{,}114$ K, against their 16,100 K; an rms reading would give 32,228 K. So literature NEFs with no stated convention are entered as `peak` (§16.3). Record in `docs/RESULTS.md`.
@@ -357,14 +369,18 @@ $$S_E^{\rm req}=\sqrt{N_{\rm amp}^{\rm req}\,\eta_0hf/A_e}\quad(\text{rms}).$$
 - In the RJ regime $S_{E,\rm BBR}\propto f$; E6 must show this slope as a sanity check, and must plot SSB and DSB required-$S_E$ curves separately.
 
 ### 8.4 RAR vs LNA throughput map (FR-SVC-C5, RQ5) [D]
-Question: where in $(f,d,K)$ does an RAR deliver more bit/s than an electronic LNA, if anywhere?
+Question: where in $(f,\bar P_{\rm rx},K)$ does an RAR deliver more bit/s than an electronic LNA, if anywhere?
 - **Fair comparison (binding):** both receivers sit behind the **same** collecting aperture $A_r$ (antenna-fed, §6.5, $G_{\rm enh}=1$), so they see the same $\eta$ per realization. They differ only in $N_{\rm amp}$, $N_{\rm img}$ (RAR `dsb`, LNA `ssb` by default) and bandwidth $B$.
-- **Equal transmit power, not equal $N_s$:** $N_s=P_t/(hfB)$ per receiver, so a wider band trades photons per mode for modes per second.
+- **Axis: mean received power, not distance (v0.4.5) [D].** A fixed transmit power is unusable: with $P_t=0.2$ W and 2 m² apertures the receivers get −6.5 to +23 dBm over 10 m–1 km, i.e. $\eta N_s\sim10^{12}$–$10^{15}$ photons per mode. Both receivers would be far outside their linear range (field at the atoms 20–35,600 V/m, §7.4), and receiver noise would be irrelevant, so the map would only show the bandwidth ratio **[V]**. The map therefore sweeps $\bar P_{\rm rx}$ directly, over the range where receiver noise matters.
+  - **Link per band:** a reference link from config (`link`: distance, apertures, coupling model, weather law) fixes the fading shape and the thermal leak $(1-\eta)\bar n_{\rm th}$. Per cell the transmit power is derived, $P_t=\bar P_{\rm rx}/\mathbb E[\eta]$, and written to the results; it is never an input.
+  - **Photons per mode:** $\eta N_s$ with $N_s=P_t/(hfB)$, so $\mathbb E[\eta N_s]=\bar P_{\rm rx}/(hfB)$ per receiver. A wider band still trades photons per mode for modes per second.
+  - **Default range:** $\bar P_{\rm rx}\in[-140,-30]$ dBm. The noise-relevant point $\mathbb E[\eta N_s]\approx D$ (long link) lies at about −109 to −76 dBm across the §16.3–16.4 receivers at their native bandwidths **[V]**, so the range leaves ≥ 30 dB of margin on each side; −30 dBm stays below typical LNA input compression **[A]** (no sourced LNA $P_{1\rm dB}$ yet; the optional LNA field `p1db_in_dbm` with `source:` enables a flag).
 - Ergodic throughput $\bar R_b=B\cdot\mathbb E_\eta\big[C_{\rm rx}(\eta;N_s,N_{\rm amp},N_{\rm img})\big]$ (§8.2). Optional outage variant: $R_{b,\epsilon}=B\cdot C_{\rm rx}(F^{-1}(\epsilon))$.
-- **Output:** $\rho(f,d;K)=10\log_{10}\big(\bar R_b^{\rm RAR}/\bar R_b^{\rm LNA}\big)$ on an $(f,d)$ grid, one panel per $K$, with the $\rho=0$ contour drawn and labeled.
+- **Linear range:** each RAR cell carries `linear_regime` and `frac_nonlinear` from §7.4 (field at the atoms). Cells with `linear_regime=False` are hatched; with `None` (no $E_{1\rm dB}$ known) the caption says the linear range is unknown.
+- **Output:** $\rho(f,\bar P_{\rm rx};K)=10\log_{10}\big(\bar R_b^{\rm RAR}/\bar R_b^{\rm LNA}\big)$, one panel per $K$, with the $\rho=0$ contour drawn and labeled and, per receiver, the dashed curve $\mathbb E[\eta N_s]=D$ that separates the power-limited from the bandwidth-limited regime.
 - **Per-band receiver inputs [A]** (IDEA Q2): RAR $(S_E,B_{\rm RAR})$ from `literature_rar.yaml` or `from_physics`; LNA $(T_n,B_{\rm LNA},\texttt{tn\_convention})$ from config with `source:`. Between configured bands, interpolate $\log S_E$, $\log T_n$, $\log B$ linearly in $\log f$; outside the configured range, mask (no extrapolation).
 - **Asymptotes (tests):** write $D(\eta)=(1-\eta)\bar n_{\rm th}+\tfrac12+N_{\rm amp}+N_{\rm img}$.
-  - Power-limited ($\eta N_s\ll D$): $R_b\to\eta P_t/(hf\,D\ln2)$, independent of $B$, so for deterministic $\eta$, $\rho\to10\log_{10}(D_{\rm LNA}/D_{\rm RAR})$.
+  - Power-limited ($\eta N_s\ll D$): $R_b\to P_{\rm rx}/(hf\,D\ln2)$, independent of $B$, so for deterministic $\eta$, $\rho\to10\log_{10}(D_{\rm LNA}/D_{\rm RAR})$.
   - Bandwidth-limited ($\eta N_s\gg D$): $R_b\approx B\log_2(\eta N_s/D)$, so bandwidth dominates.
   - Hence an RAR can win only through bandwidth at high SNR, or through lower noise at low SNR. The figure caption states which regime each region is in.
 
@@ -470,10 +486,10 @@ large_scale:
   gamma_abs_per_m: {5: 1.524e-6, 30: 4.394e-6, 100: 6.641e-6, 300: 5.088e-6}   # O2 only, §16.1
   gamma_abs_source: "ITU-R P.676-12 Annex 1, 1013.25 hPa, 300 K (itur 0.4.0)"
   stochastic_per_m:                         # water vapour + rain, KHU Seoul, §16.2
-    5:   {mean: 4.160e-7, std: 9.028e-7}
-    30:  {mean: 2.839e-5, std: 6.760e-5}
-    100: {mean: 1.509e-4, std: 2.049e-4}
-    300: {mean: 1.523e-3, std: 1.101e-3}
+    5:   {mean: 4.157e-7, std: 9.027e-7}
+    30:  {mean: 2.838e-5, std: 6.760e-5}
+    100: {mean: 1.508e-4, std: 2.048e-4}
+    300: {mean: 1.522e-3, std: 1.098e-3}
   stochastic_source: "ITU-R P.836 + P.676-12 (vapour), P.837-7 + P.838-3 (rain), annual, 37.597N 127.052E"
 link_budget:
   coupling_model: goubau     # goubau | friis_clipped (baseline, physical=False)
@@ -488,15 +504,44 @@ outputs: {figure: true, csv: true, latex_table: false}
 ```
 Receivers in E5/E6/E8 declare `sideband` and, for the RAR, `field_convention`; electronic receivers declare `tn_convention`.
 
-E2 adds `law_comparison: {match: psi_moments, eta_gt1: clip, sigma_ratio: [...]}` (§6.2). E5 adds the throughput-map block (§8.4):
+E2 adds `law_comparison: {match: psi_moments, eta_gt1: clip, sigma_ratio: [...]}` (§6.2).
+
+**E1/E2 operating points (QUESTIONS Q-15) [D]:** every operating point is a config value; nothing is hard-coded in `e1.py`/`e2.py`, and figure captions and axis labels read the values from the config. The defaults below are the agent's choices (option A), which Abdurrahman may change later without a code change:
+```yaml
+# configs/e1.yaml
+operating_point:
+  f_threshold_hz: 5.0e9          # band used for eta* in the eta_s_bar sweep
+  eta_s_bar_pdf: 0.999           # eta_s_bar of the pdf panel
+  compound_bands_hz: [30.0e9, 100.0e9]   # 5 GHz omitted: outage = 1 beyond 12.5 m with 2 m^2 (§16.6)
+  K: [0, 1, 10, 100]
+# configs/e2.yaml
+operating_point:
+  f_hz: 30.0e9
+  distance_m: 50.0               # inside the 86.6 m reach at 30 GHz (§16.6)
+  K: 10
+  N_s: 1.0e4
+  A_t_m2: 2.0
+  A_r_m2: 2.0
+  rar: {source: literature_rar, interpolate: loglog}   # as in E8
+law_comparison:
+  match: psi_moments
+  eta_gt1: clip
+  sigma_ratio: {start: 0.05, stop: 3.0, num: 40, scale: log}
+  reference_points:              # drawn as labeled markers on every sigma_ratio axis
+    - {sigma_ratio: 2.06, label: "Seoul, annual (30 GHz)", source: "TSD §16.2"}
+```
+- `reference_points` is a list, so more sites or bands can be added. If `f_hz` or the distance changes, the Seoul ratio must be recomputed from §16.2 for the new band ($\sigma_\Psi/\bar\Psi=s_1/(\gamma_{\rm abs}+m_1)$, distance-independent); the runner warns when a reference point's band differs from `f_hz`.
+- Every operating-point value is written to `meta.json` and included in the cache hash.
+
+E5 adds the throughput-map block (§8.4):
 ```yaml
 throughput_map:
-  P_t_w: 0.2                 # [A] design choice (23 dBm, 3GPP power class 3); equal for both receivers
+  p_rx_dbm: {start: -140, stop: -30, num: 45}   # mean received power axis; P_t is derived per cell
   f_ghz: {start: 5, stop: 300, num: 40, scale: log}
-  distance_m: {start: 10, stop: 1000, num: 40, scale: log}
+  link: {distance_m: 1000.0, A_t_m2: 2.0, A_r_m2: 2.0, coupling_model: goubau, weather: stochastic_per_m}   # [A] reference link
   K: [0, 10, 100]
   rar: {source: literature_rar, require_b_hz: true, sideband: from_entry}   # §16.3
-  lna: {bands: [...], B_hz: [...], tn_convention: rj, sideband: ssb}        # §16.4
+  lna: {bands: [...], B_hz: [...], tn_convention: rj, sideband: ssb, p1db_in_dbm: null}   # §16.4; P1dB optional, needs source
   interpolate: loglog        # no extrapolation; out-of-range cells are masked
   equal_bandwidth_case: true # also run with B_LNA := B_RAR per cell (separates noise gap from bandwidth gap)
 ```
@@ -513,24 +558,31 @@ throughput_map:
   source: "S. Borowka et al., Nat. Photon. (2024), doi:10.1038/s41566-023-01295-w"   # required
 ```
 
-E9 adds a `lindblad:` block (all values `# [A]` until Abdurrahman fills them with sources):
+E9 adds a `lindblad:` block. Values are sourced in §16.8 (QUESTIONS Q-17); the schema includes the implementer's additions (`mw.f_hz`, direct `coupling.omega_c_over_2pi_mhz`, a required `sources` map, `source` on each decay, `link`/`crossover` blocks):
 ```yaml
 lindblad:
   method: auto               # auto | weak_probe | full   (§14.6)
   weak_probe_tol: 0.01
   species: Rb87
   n_levels: 4
+  scheme: "5S1/2 -> 5P3/2 -> 74D5/2 -> 75P3/2"          # §16.8
   T_vapor_k: 300.0
-  n0_per_m3: null            # [A] or from a vapor-pressure helper with source
-  cell_length_m: null        # [A]
-  probe: {wavelength_m: 780.241e-9, power_w: null, waist_m: null, d12_cm: null}
-  coupling: {wavelength_m: null, power_w: null, waist_m: null, d23_cm: null}
-  mw: {d34_cm: null, e_lo_pk_v_per_m: null}
-  decays: []                 # list of {from, to, rate_per_s, source}; default 4->1, see §14.3
-  gamma_t_per_s: null        # [A] transit rate
-  detector: {eta_d: null, nep_w_per_rthz: 0.0}
+  n0_per_m3: 1.569e16        # pure-87Rb cell at 300 K (ARC vapor pressure); 4.367e15 for natural abundance
+  cell_length_m: 0.070       # Cai et al. 2021 geometry
+  probe: {wavelength_m: 780.241e-9, power_w: 100.0e-6, waist_m: 0.75e-3, d12_cm: 2.5342e-29}
+  coupling: {wavelength_m: 479.537e-9, power_w: 0.420, waist_m: 1.25e-3, d23_cm: 5.6632e-32}   # or omega_c_over_2pi_mhz
+  mw: {f_hz: 5.0987e9, d34_cm: 2.9749e-26, e_lo_pk_v_per_m: 0.353}
+  decays:
+    - {from: 2, to: 1, rate_per_s: 3.8116e7, source: "Steck Rb87 D line rev. 2.3: Gamma2 = 2pi x 6.0666 MHz"}
+    - {from: 3, to: 1, rate_per_s: 5.621e3,  source: "ARC 3.10.2, 74D5/2 lifetime 177.9 us at 300 K (incl. BBR)"}
+    - {from: 4, to: 1, rate_per_s: 4.511e3,  source: "ARC 3.10.2, 75P3/2 lifetime 221.7 us at 300 K (incl. BBR)"}
+  gamma_t_per_s: 3.605e5     # [A] estimate vbar / w_probe (vbar = 270.3 m/s), i.e. 2pi x 57.4 kHz
+  detector: {eta_d: 0.85, nep_w_per_rthz: 0.0}   # [A] typical Si photodiode at 780 nm
   doppler: {n_sigma: 5, n_v_start: 4097, rtol: 1.0e-5, n_v_max: 1048577}
   sweep: {omega_c_over_2pi_mhz: [], e_lo_pk_v_per_m: []}
+  sources: {vapor: "ARC 3.10.2 Rubidium87.getNumberDensity(300 K)", probe: "Cai et al. arXiv:2111.06582 (100 uW, w = 0.75 mm)",
+            coupling: "Cai et al. (420 mW, w = 1.25 mm); d23 from ARC", mw: "ARC 3.10.2 (74D5/2 -> 75P3/2, pi, mj = 1/2); E_LO from Cai et al.",
+            transit: "[A] vbar/w estimate", detector: "[A]"}
 ```
 Every numeric literature value carries `source:`; placeholders carry `# [A]` and are listed in `QUESTIONS.md`.
 
@@ -596,7 +648,8 @@ $$\rho_{21}=\cfrac{\Omega_p/2}{d_2+i\gamma_{21}-\cfrac{\Omega_c^2/4}{d_3+i\gamma
 - **Small-signal transfer function in $\Omega_m$:** with $M_1=\partial M/\partial\Omega_m$ (entries $(2,3),(3,2)=-\tfrac12$),
 $$H(i\omega)=e_1^\top\,(i\omega I-iM)^{-1}\,(iM_1x_0),\qquad H(0)=-e_1^\top M^{-1}M_1x_0.$$
 - Vectorize over velocity classes (closed-form tridiagonal solve or the continued fraction directly); no Python loops over $v$.
-- **Verified:** against the full Lindblad model (§14.5) at $\Omega_p/2\pi=0.01$ MHz, $\Omega_c/2\pi=5$, $\Omega_m/2\pi=20$ MHz: steady state and $H(i\omega)$ for $\omega/2\pi\in\{0,0.3,1,3\}$ MHz agree to ≤ 8e-5 relative at $v=0$ and ≤ 1e-8 at $v=100$ m/s.
+- **Verified (QUESTIONS Q-18; rates now stated):** test case $\Gamma_2=2\pi\times6.0666$ MHz, $\gamma_t=2\pi\times0.1$ MHz, Rydberg decays $\Gamma_3=\Gamma_4=2\pi\times1$ kHz, no laser dephasing. Against the full Lindblad model (§14.5) at $\Omega_p/2\pi=0.01$ MHz ($\Omega_p/\Gamma_2=1.65\times10^{-3}$), $\Omega_c/2\pi=5$, $\Omega_m/2\pi=20$ MHz: steady state and $H(i\omega)$ for $\omega/2\pi\in\{0,0.3,1,3\}$ MHz agree to ≤ 1.5e-4 relative at $v=0$ and ≤ 1e-8 at $v=100$ m/s **[V by implementer]**. (The earlier "≤ 8e-5" was measured with unstated rates and is withdrawn.)
+  - The difference is the weak-probe saturation correction: it scales as $\Omega_p^2$ (×4.00 per doubling) and falls as $\gamma_t$ grows (6.9e-5 at $2\pi\times0.2$ MHz, 3.1e-4 at $2\pi\times0.05$ MHz). It is a model error of the weak-probe engine, not a bug in either engine.
 - **Validity (measured, Doppler-averaged, same $\Omega_c,\Omega_m$):** relative error in $\langle\rho_{21}\rangle$ of 4e-6 at $\Omega_p/2\pi=0.01$ MHz, 3.5% at 1 MHz, 65% at 5 MHz. The error grows as $\Omega_p^2$; the weak-probe model must not be used for sensitivity optimization at strong probe without the §14.5 check.
 
 ### 14.5 Full Lindblad model (strong-probe check)
@@ -629,17 +682,20 @@ size $N_{\rm lev}^2\times N_{\rm lev}^2$ (9 or 16).
 - **Transmission** (weak probe, thin uniform cell): $P_{\rm out}=P_{\rm in}e^{-\alpha L}$.
 - **Superheterodyne:** LO field $E_{\rm LO}$ plus signal $E_{\rm sig}e^{i\delta t}$ gives $\Omega_m(t)\approx\Omega_{\rm LO}+\Omega_{\rm sig}\cos(\delta t+\phi)$ for $E_{\rm sig}\ll E_{\rm LO}$, with $\Omega=d_{34}E_{\rm pk}/\hbar$. Because the response is to the envelope, signals at $\pm\delta$ are indistinguishable (DSB, §7.1).
 - **Slope:** $\kappa\equiv\partial P_{\rm out}/\partial E_{\rm sig}=-P_{\rm out}L\,\dfrac{\partial\alpha}{\partial\Omega_m}\dfrac{d_{34}}{\hbar}$, with $\partial\alpha/\partial\Omega_m$ from the Doppler-averaged $H(0)$ (§14.4 or §14.5). Since κ is linear, it is the same per peak or per rms field.
-- **Instantaneous bandwidth $B_{3\rm dB}$:** the highest $\omega/2\pi$ with $|H(i\omega)|\ge|H(0)|/\sqrt2$, found on a log grid then refined by `brentq`. $|H|$ can peak above $|H(0)|$ near the EIT dynamics (seen at ~1 MHz in a test case **[V]**); report the peaking value too.
+- **Instantaneous bandwidth $B_{\rm flat}$ (QUESTIONS Q-20(3), option B) [D]:** the ±3 dB flatness bandwidth, i.e. the largest $\omega/2\pi$ such that $|H(i\omega')|/|H(0)|\in[1/\sqrt2,\sqrt2]$ for **all** $\omega'\in[0,\omega]$. Found by scanning a log grid from DC to the first exit from the band, then refined by `brentq` on that exit (whichever edge, upper or lower, was crossed). Code name `bandwidth_flat`; this is the $B$ passed to §7.4 and E5.
+  - **Why not the highest −3 dB point:** $|H|$ peaks 3–10× above $|H(0)|$ near $\omega\approx\Omega_{\rm LO}$ (QUESTIONS Q-20), so "highest $\omega$ with $|H|\ge|H(0)|/\sqrt2$" tracks the LO Rabi frequency, not a usable flat passband.
+  - Also report `peaking_ratio` $=\max_\omega|H|/|H(0)|$, the frequency of the peak, and which edge ended $B_{\rm flat}$. The legacy highest-−3 dB frequency may be stored as `bandwidth_3db_legacy` for diagnostics; it is never used downstream.
 
 ### 14.8 Sensitivity and $N_{\rm amp}$ [D]
 Single-sided optical-power noise PSD at the detector: $S_P=2h\nu_pP_{\rm out}/\eta_d+\mathrm{NEP}^2$. The noise-equivalent field is
 $$S_E=\frac{\sqrt{S_P}}{|\kappa|}\qquad(\textbf{rms}\text{, single-sided; consistent with §2 and §7.4}).$$
 Derivation: the output at $\delta$ has rms amplitude $|\kappa|E_{\rm sig,rms}$; SNR = 1 in 1 Hz gives $\kappa^2E_{\rm rms}^2=S_P$. Do **not** insert a factor $\sqrt2$.
 
-Then $N_{\rm amp}$ from §7.4 (with `field_convention="rms"`, `sideband="dsb"`). **[A]** Cross-check against one published PSN-limited sensitivity (e.g. Jing et al., Nat. Phys. 2020, or Cox et al., PRL 2018), noting whether that paper quotes rms or peak fields, and record it in `docs/RESULTS.md`. Atom projection noise is an optional term added in quadrature, with a formula supplied by Abdurrahman; not implemented until then.
+Then $N_{\rm amp}$ from §7.4 (with `field_convention="rms"`, `sideband="dsb"`). Cross-check: the bound test of §16.8 against Cai et al. (model floor ≤ measurement), recorded in `docs/RESULTS.md`. Atom projection noise is an optional term added in quadrature, with a formula supplied by Abdurrahman; not implemented until then.
 
 ### 14.9 Linear range [D]
-- **Validity:** quasi-static, valid only if $\delta\ll B_{3\rm dB}$ (assert).
+- **Validity:** quasi-static, valid only if $\delta\le0.1\,B_{\rm flat}$ **[A]** (`QUASI_STATIC_FRACTION = 0.1`; checked when `delta_hz` is passed; QUESTIONS Q-20(2)).
+- **Search bound (QUESTIONS Q-20(1)):** the envelope picture assumes $E_{\rm sig}\ll E_{\rm LO}$, so the $E_{1\rm dB}$ search stops at $\Omega_{\rm sig}=\Omega_{\rm LO}$. If no 1 dB point is found below it, return `NaN` with case `none` and reason `"linear beyond the LO field; envelope model invalid there"`.
 - **First-harmonic amplitude:** $A_1(\Omega_{\rm sig})=\frac1\pi\int_0^{2\pi}P_{\rm ss}(\Omega_{\rm LO}+\Omega_{\rm sig}\cos\theta)\cos\theta\,d\theta$ (Gauss–Legendre, 64 nodes).
 - **Compression:** $c=A_1/(\kappa_\Omega\,\Omega_{\rm sig})$, with $\kappa_\Omega=\partial P_{\rm out}/\partial\Omega_m$ at $\Omega_{\rm LO}$.
 - **$E_{1\rm dB}$:** the smallest signal field where $|20\log_{10}c|=1$ dB, covering both compression ($c<1$) and expansion ($c>1$, possible near EIT features). Found with `brentq` on $\log\Omega_{\rm sig}$; record which case occurred.
@@ -652,9 +708,9 @@ src/qmwlink/receivers/rydberg_physics/
 ├── weak_probe.py  # M, s, steady state, dynamics, transfer function    §14.4
 ├── lindblad.py    # Liouvillian A + vB, batched steady state, transfer §14.5
 ├── doppler.py     # grids, weights, convergence loop                    §14.6
-├── response.py    # Doppler-averaged H(iω), bandwidth, peaking          §14.7
+├── response.py    # Doppler-averaged H(iω), flatness bandwidth, peaking §14.7
 ├── readout.py     # alpha, P_out, kappa, S_E, E_1dB                     §14.7–14.9
-└── model.py       # LindbladRARModel: SI in -> (kappa, S_E_rms, N_amp, B_3dB, E_1dB_pk, method, discrepancy)
+└── model.py       # LindbladRARModel: SI in -> (kappa, S_E_rms, N_amp, B_flat, peaking, E_1dB_pk, method, discrepancy)
 ```
 - `model.py` converts SI inputs to core units and back:
   - probe/coupling power and waist → Rabi frequency, via the peak field $E_{\rm pk}=\sqrt{2I/c\epsilon_0}$ with peak intensity $I=2P/\pi w_0^2$;
@@ -665,18 +721,19 @@ src/qmwlink/receivers/rydberg_physics/
 ### 14.11 Validation
 | ID | Test | Reference |
 |---|---|---|
-| T-LIN-1 | Cold 3-level weak-probe: `full` vs the continued fraction ($\Omega_p/\Gamma_2\le10^{-2}$) | rtol 1e-4 **[V]** (agrees to ~1e-5 rel.) |
+| T-LIN-1 | Cold 3-level weak-probe: `full` vs the continued fraction, rates as in §14.4, $\Omega_p/\Gamma_2\le2\times10^{-3}$ | rtol 1e-4 **[V]** (1.6e-5 measured at the edge; 4.1e-4 at $10^{-2}$, which is outside the range) |
 | T-LIN-2 | `full`: trace 1, Hermitian, eigenvalues ≥ −1e-12 for random valid params | — |
 | T-LIN-3 | Two-level limit ($\Omega_c=0$): $\rho_{21}=(\Omega_p/2)/(\Delta_p+i\gamma_{21})$ in both methods | rtol 1e-4 |
 | T-LIN-4 | Cold 4-level AT splitting in probe scan $\approx\Omega_m$ (for $\Omega_m\gg$ EIT width) | within 3% at $\Omega_m/2\pi=4$ MHz **[V]** (3.93 MHz) |
 | T-LIN-5 | Doppler-averaged (300 K) probe-scan AT splitting $\approx(\lambda_c/\lambda_p)\Omega_m$, two most prominent absorption minima (`scipy.signal.find_peaks` with prominence) | Case $\Omega_p,\Omega_c,\Omega_m,\gamma_t=2\pi\times(0.05,5,20,0.1)$ MHz, $\lambda_c=480$ nm: 12.4 MHz vs 12.30 predicted (0.8%), tol 2% **[V]**. Asymptotic formula: 5.7% off at $\Omega_m/2\pi=10$ MHz, so do not test below $\Omega_m\approx4\Omega_c$. |
 | T-LIN-6 | $H(0)$ equals central finite difference of the steady state in $\Omega_m$, both methods | rtol 1e-6 **[V]** |
-| T-LIN-7 | Weak-probe vs full transfer function at $\Omega_p/\Gamma_2\le2\times10^{-3}$, $\omega/2\pi\in\{0,0.3,1,3\}$ MHz | rtol 2e-4 **[V]** (≤ 8e-5 measured) |
+| T-LIN-7 | Weak-probe vs full transfer function, rates as in §14.4, $\Omega_p/2\pi\le0.01$ MHz ($\Omega_p/\Gamma_2\le1.65\times10^{-3}$), $\omega/2\pi\in\{0,0.3,1,3\}$ MHz | rtol 2e-4 **[V]** (1.5e-4 measured at $v=0$; 2.2e-4 at $\Omega_p/\Gamma_2=2\times10^{-3}$, outside the range) |
 | T-LIN-8 | Doppler convergence loop terminates and is monotone in tolerance | — |
 | T-LIN-9 | `full` vs QuTiP on 20 random parameter sets (optional) | rtol 1e-8 |
 | T-LIN-10 | Two-level resonant cross-section $3\lambda^2/2\pi$ from §14.7 ($\gamma_t=0$, weak probe) | rtol 1e-4 |
 | T-LIN-11 | `auto` method: discrepancy above `weak_probe_tol` triggers recomputation with `full` | synthetic strong-probe case |
-| T-LIN-12 | Readout units: $S_E$ from §14.8 is rms; $E_{1\rm dB}$ from §14.9 is peak; the §7.4 linear-range flag compares peak with peak | unit test on a hand case |
+| T-LIN-12 | Readout units: $S_E$ from §14.8 is rms; $E_{1\rm dB}$ from §14.9 is peak; the §7.4 linear-range flag compares peak with peak, using the field at the atoms | unit test on a hand case; for $A_{r,\rm eff}=100A_e$ the atom field is $10\times$ the incident field |
+| T-LIN-13 | Flatness bandwidth on synthetic responses: a first-order low-pass gives $B_{\rm flat}=$ its −3 dB corner; a response with a +6 dB resonance at $f_r$ ends $B_{\rm flat}$ at the **upper** edge below $f_r$; `peaking_ratio` and the peak frequency are returned | rtol 1e-6 (analytic) |
 
 ### 14.12 Cost budget (measured on a 2-core cloud machine, single-threaded BLAS) [V]
 | Method | Cost per velocity class |
@@ -688,11 +745,29 @@ src/qmwlink/receivers/rydberg_physics/
 Implications for E9 with $N_v\approx3\times10^4$:
 - A weak-probe sweep of $10^4$ parameter points costs ≈ 10 s.
 - A full-model curve of 20 $\Omega_p$ values (steady state + derivative) costs ≈ 20 s.
+- **Measured by the implementer (QUESTIONS Q-19):** at the converged $N_v=32769$, one full-engine point costs 0.3 s for steady state + $H(0)$, 15–25 s for $B_{\rm flat}$ (≈ 75 batched solves) and ≈ 170 s for $E_{1\rm dB}$ (≈ 33 amplitudes × 32 nodes).
+- **Rule (Q-19 option A, adopted because the sourced baseline is strong-probe, §16.8):** in `full` mode, sweeps compute only $S_E$ and $N_{\rm amp}$; $B_{\rm flat}$, peaking and $E_{1\rm dB}$ are computed at the baseline point (and at most 3 named extra points). Option B (per-class Liouvillian eigendecomposition for $H(i\omega)$) and C (Chebyshev interpolation of $P_{\rm ss}$) stay in reserve; either needs a conditioning test before use.
 - The `auto` checkpoints add seconds.
 
 E9 therefore fits NFR-3 (< 5 min per figure). These per-class costs are recorded benchmarks, not CI gates (FSD FR-LIN-2/3). No compiled code (Numba, Cython, C++) is needed; adding any requires a `QUESTIONS.md` entry with a profile showing the hotspot.
 
 ## 15. Changelog
+
+**0.4.5 (2026-11-11)**, paired with FSD v0.6.5. Resolves QUESTIONS Q-12, Q-13, Q-14, Q-16, Q-17, Q-18, Q-19, Q-20, Q-21, Q-22.
+- §5.2 (Q-12): near-degenerate limit of the general $\tilde\nu_-$ form documented; tests-only absolute slack `ABS_F_GENERAL_DEGENERATE = 3e-8`.
+- §6.1 (Q-21): explicit `ncx2_pdf` value at $x=0$, $\nu=2$.
+- §6.2 (Q-13): the V0 clip acts on the total $\eta$; both masses reported; `sample_eta_clipped` deleted.
+- §6.4 (Q-22): one nested integral per cdf, tail chosen by a cheap Gauss–Legendre estimate, with a guard.
+- §7.4 (Q-20(4)): the linear-range check uses the field **at the atoms**, $\sqrt{2\eta_0P_{\rm rx}/A_e}$; `frac_nonlinear`; `linear_regime=None` when $E_{1\rm dB}$ is unknown.
+- §8.4: E5 sweeps mean received power (−140 to −30 dBm) with a configured reference link; $P_t$ is derived, never input. The 0.2 W of v0.4.3 put both receivers 10¹²–10¹⁵ photons per mode into saturation and is withdrawn.
+- §14.4, §14.11 (Q-18): rates of the verification case stated; T-LIN-1/7 ranges narrowed to where the tolerances hold; "≤ 8e-5" withdrawn.
+- §14.7 (Q-20(3)): ±3 dB flatness bandwidth $B_{\rm flat}$ replaces the highest −3 dB point; peaking reported; T-LIN-13 added. §14.9 (Q-20(1),(2)): $E_{1\rm dB}$ search bounded by $\Omega_{\rm LO}$; $\delta\le0.1B_{\rm flat}$.
+- §14.12 (Q-19): full-engine sweeps compute $S_E$/$N_{\rm amp}$ only; bandwidth and linear range at the baseline.
+- §12, §16.8 (Q-17): sourced E9 inputs (ARC 3.10.2, Steck, Cai et al. geometry); the baseline is strong-probe ($\Omega_p/\Gamma_2=1.84$); §14.8 cross-check defined as a bound against Cai et al.
+- §16.2 (Q-16): `scripts/derive_inputs.py` supplied; tables replaced by its output (4th-figure changes only); itur in an optional `[scripts]` extra; FSD Q-14 (defaults table, `inputs_hash`) recorded in FR-EXP-4.
+
+**0.4.4 (2026-11-11)**, paired with FSD v0.6.4. Resolves QUESTIONS Q-15.
+- §12: E1/E2 operating points are config parameters with the agent's choices as defaults (option A); E2 `reference_points` marks the Seoul value σ/Ψ̄ = 2.06 (§16.2) and warns when its band differs from `f_hz`. Captions read the config; values go to `meta.json` and the cache hash.
 
 **0.4.3 (2026-11-10)**, paired with FSD v0.6.3. Resolves QUESTIONS Q-7, Q-9, Q-10, Q-11.
 - §6.1 (Q-9): `ncx2.sf` upper tail supported for $K\le10^9$; the warning is an error in tests.
@@ -763,14 +838,14 @@ Annual climatology at Kyung Hee Univ. Seoul campus (37.597 N, 127.052 E):
 
 | Band | $m_1$ (per m) | $s_1$ (per m) | $k=m_1^2/s_1^2$ | Rain share of variance |
 |---|---|---|---|---|
-| 5 GHz | 4.160e-7 | 9.028e-7 | 0.21 | 90 % |
-| 30 GHz | 2.839e-5 | 6.760e-5 | 0.18 | 95 % |
-| 100 GHz | 1.509e-4 | 2.049e-4 | 0.54 | 80 % |
-| 300 GHz | 1.523e-3 | 1.101e-3 | 1.91 | 3 % |
+| 5 GHz | 4.157e-7 | 9.027e-7 | 0.21 | 91 % |
+| 30 GHz | 2.838e-5 | 6.760e-5 | 0.18 | 95 % |
+| 100 GHz | 1.508e-4 | 2.048e-4 | 0.54 | 80 % |
+| 300 GHz | 1.522e-3 | 1.098e-3 | 1.92 | 3 % |
 
 - $k<1$ below 300 GHz: the density piles up near $G=0$ (dry most of the time), with a long rain tail.
 - These are annual statistics; a single season (monsoon) is worse. Every E3 caption states the location and "annual".
-- `scripts/derive_inputs.py` must reproduce both tables to 3 significant figures from the stated ITU recommendations, location and integration ranges.
+- **Reproduction (QUESTIONS Q-16, resolved):** `scripts/derive_inputs.py` (supplied by Abdurrahman, pinned `itur==0.4.0`, runs in ≈ 12 s) produces both tables; its docstring states the binding integration rule: the 18 standard P.836 levels with ρ linear in $p$, a 2000-point uniform trapezoid over 0.1–99 % for vapour (the conditional mean on that range), and a 200-point log-spaced trapezoid in $p$ from 0.001 % to $P_0$ for rain. The tables above **are** its output (v0.4.5; they differ from the v0.4.3 hand computation only in the 4th significant figure). A regression test runs the script when `itur` is installed (skipped otherwise) and checks the config values to `rtol=1e-3`. `itur` goes into an optional `[scripts]` extra in `pyproject.toml`.
 
 ### 16.3 Published Rydberg receiver points (E5, E6, E8; `literature_rar.yaml`) [L]
 $N_{\rm amp}$ and $T_{\rm equiv}=N_{\rm amp}hf/k_B$ are derived [V] with the §7.4 mapping; unstated conventions are read as peak (§7.4 cross-check). "Gap" is a preview against a room-temperature LNA (§16.4) at equal bandwidth, long link ($\eta\to0$), power-limited; E5 is authoritative.
@@ -825,10 +900,34 @@ $A_t=A_r=2$ m² is a design choice: about a 2.0 m dish at aperture efficiency $e
 E3's 10–1000 m grid is therefore in outage almost everywhere at 5 GHz. That is the aperture-limited result, not a defect; a swept-aperture panel is recommended.
 
 ### 16.7 Still [A] after this pass
-- Apertures (§16.6) and $P_t=0.2$ W (design choices).
+- Apertures (§16.6) and the E5 reference link (§8.4) (design choices). $P_t$ is no longer an input: the 0.2 W proposed in v0.4.3 saturated both receivers and is withdrawn.
+- LNA input compression $P_{1\rm dB}$ (none sourced; the E5 range stops at −30 dBm for that reason).
 - $B_{\rm LNA}$ at 100 GHz.
 - A standalone LNA at 300 GHz.
 - RAR bandwidths for the Jing, Cai and She entries.
 - Borówka's sideband.
 - Yang 2024 journal volume (VERIFY).
 - Full-path correlation of weather loss (§6.2).
+- E9: transit rate, detector efficiency, and the borrowed beam geometry (§16.8).
+
+### 16.8 Rydberg receiver physics inputs (E9; QUESTIONS Q-17) [L][V]
+**Scheme:** ⁸⁷Rb ladder 5S₁/₂ → 5P₃/₂ (780.241 nm) → 74D₅/₂ (479.537 nm) → 75P₃/₂ (MW, 5.0987 GHz, the closest nD₅/₂→(n+1)P₃/₂ line to 5 GHz; 75D₅/₂→76P₃/₂ is 4.8934 GHz). All atomic numbers from ARC 3.10.2 (Šibalić et al., CPC 220, 319, 2017) and Steck (Rb87 D line data, rev. 2.3), computed here **[V]**.
+
+| Quantity | Value | Source |
+|---|---|---|
+| $d_{12}$ (D₂ cycling) | 2.989 $ea_0$ = 2.5342e-29 C m | Steck |
+| $\Gamma_2/2\pi$ | 6.0666 MHz (ARC: 6.0659) | Steck |
+| $d_{23}$ (5P₃/₂→74D₅/₂, π, $m_j=\tfrac12$) | 0.0067 $ea_0$ = 5.663e-32 C m | ARC |
+| $d_{34}$ (74D₅/₂→75P₃/₂, π, $m_j=\tfrac12$) | 3509 $ea_0$ = 2.975e-26 C m (radial 7162 $ea_0$; stretched σ: 4530 $ea_0$) | ARC |
+| Rydberg lifetimes at 300 K (incl. BBR) | 74D₅/₂: 177.9 µs ($\Gamma_3/2\pi$ = 0.89 kHz); 75P₃/₂: 221.7 µs (0.72 kHz) | ARC |
+| $N_0$ at 300 K | 1.569e16 m⁻³ (pure ⁸⁷Rb); 4.367e15 m⁻³ (natural abundance, 27.83 %) | ARC vapor pressure |
+| Mass, $\sigma_v$ | 86.909180 u; 169.41 m/s | Steck / ARC |
+
+**Optical/MW geometry, borrowed from one fully specified experiment** (Cai et al., arXiv:2111.06582: ⁸⁵Rb, 70S₁/₂→70P₃/₂ at ≈10.65 GHz, 12.5 nV/cm/√Hz): probe 100 µW, $w_p$ = 0.75 mm; coupling 420 mW, $w_c$ = 1.25 mm; cell 70 mm; $E_{\rm LO}$ = 0.353 V/m.
+- **Cross-checks of our conversions against that paper [V]:** ARC gives their quoted MW dipole (2395.5 vs 2395 a.u.) and transition (10.654 GHz); §14.10's power→Rabi conversion with $d_{12}$ gives $\Omega_p/2\pi$ = 11.17 MHz against their 11.13 MHz (0.4 %).
+- **Resulting Rabi frequencies in our scheme:** $\Omega_p/2\pi$ = 11.17 MHz ($\Omega_p/\Gamma_2$ = 1.84); $\Omega_c/2\pi$ = 0.970 MHz; $\Omega_{\rm LO}/2\pi$ = 15.85 MHz.
+- **Consequence (QUESTIONS Q-19):** an experimentally optimized probe is **strong** ($\Omega_p>\Gamma_2$), far outside the weak-probe range (§14.4). E9 at this baseline runs on the `full` engine, so Q-19 option A applies (§14.12): in `full` mode sweep only $S_E$/$N_{\rm amp}$, and compute $B_{\rm flat}$ and $E_{1\rm dB}$ at the baseline point only.
+
+**Still [A]:** transit rate $\gamma_t\approx\bar v/w_p$ = 3.6e5 s⁻¹ (2π × 57 kHz; order-of-magnitude estimate); detector $\eta_d$ = 0.85 (typical Si photodiode at 780 nm); applying ⁸⁵Rb/70S beam geometry to an ⁸⁷Rb/74D scheme.
+
+**§14.8 cross-check (replaces the open [A]):** Cai et al. do not claim shot-noise-limited operation, so the check is a **bound**: run the model with their species, states and geometry (⁸⁵Rb, 70S₁/₂→70P₃/₂, values above, 300 K assumed since unstated), read their 12.5 nV/cm/√Hz as peak (§7.4), and require model $S_{E,\rm rms}\le$ measured $S_{E,\rm rms}$ = 8.84 nV/cm/√Hz (the model is the shot-noise floor; a measurement can only be worse). Report the ratio in `docs/RESULTS.md`; a model floor above the measurement means a model or conversion error.

@@ -165,7 +165,7 @@
 - Options: A) Abdurrahman supplies the script used for §16; B) I write it once `itur` may be installed and the
   integration rule is stated.
 - Recommendation: A. Not needed for `make paper-figs` (the configs carry the numbers with `source:`).
-- Status: open
+- Status: closed 2026-11-11: script supplied by Abdurrahman at `scripts/derive_inputs.py` (TSD v0.4.5 §16.2); with itur 0.4.0 it reproduces both §16 tables. `itur` is the optional `[scripts]` extra.
 
 ## Q-17 [non-blocking] E9 / receiver-model inputs are placeholders; schema additions to the TSD §12 `lindblad` block
 - Context: `configs/e9.yaml`, `experiments/schema.py::LindbladCfg`, FR-RX-6, FR-LIN-6, TSD §12, §14.8, §14.10.

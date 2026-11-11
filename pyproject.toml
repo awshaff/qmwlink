@@ -28,6 +28,8 @@ dev = [
     "mypy==2.4.1",
     "types-PyYAML==6.0.12.20261030",
 ]
+# scripts/derive_inputs.py only (TSD §1, §16.2); never imported by src/.
+scripts = ["itur==0.4.0"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

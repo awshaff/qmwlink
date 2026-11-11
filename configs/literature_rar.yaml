@@ -1,5 +1,5 @@
-# Published Rydberg receiver points for the E5/E6/E8/E9(c) inputs (FR-EXP-7; TSD §16.3, from
-# configs/literature_q7_q11.yaml / Abdurrahman's compilation 2026-11-10).
+# Published Rydberg receiver points for the E5/E6/E8/E9(c) inputs (FR-EXP-7; TSD §16.3,
+# Abdurrahman's compilation 2026-11-10).
 # s_e is converted to V/m/sqrt(Hz): 1 nV/cm/rtHz = 1e-7 V/m/rtHz. Unstated conventions are `peak`
 # (TSD §7.4 cross-check). Superheterodyne/LO entries are `dsb`. b_hz is null where not reported
 # (those entries are dropped from E5 when require_b_hz is true).
